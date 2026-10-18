@@ -70,20 +70,19 @@ When creating or updating RuneStorage custom items, buildable pieces, props, ter
 
 ## RuneStorage architecture rules
 
-- The RuneStorage Core is the authoritative owner of stored item data.
-- The RuneStorage Terminal is only an interaction point and UI. It must not maintain a second item ledger.
-- Stage 1 targets 20,000 total item units and 256 distinct item keys. Do not silently reduce this to a small chest-style slot count.
+- The RuneStorage Core's inherited Valheim `Container` and `Inventory` are the single authoritative storage inventory. The terminal is an interaction point and view/request UI, not a second inventory or item ledger.
+- Capacity is measured in inventory slots, not a promised number of item units or distinct item keys. Tier I is 256 slots; proposed later tiers double that capacity to 512 and 1,024 slots. Normal Valheim stack limits apply, so total item count depends on the stored item mix.
+- The terminal presents a searchable aggregate view: compatible stacks are grouped into one displayed item row with their summed quantity, while items whose identity-relevant metadata differs remain separate. Search and sorting only affect the view.
 - RuneStorage has one buildable Core identity (`piece_runestorage_core`). Capacity tiers belong to that placed Core and upgrades change it in place; do not create separate Mk I/Mk II/Mk III build pieces.
-- The Core's named clone currently uses the cache-verified `piece_chest_wood` runtime shell. Remove its inherited `Container` so it cannot provide a parallel chest inventory beside the Core ledger.
+- The Core's named clone currently uses the cache-verified `piece_chest_wood` runtime shell. Retain and configure its inherited `Container`; do not create a second storage authority. Before wiring tier expansion, verify `Container.Awake`/`Load` ordering and ensure the saved tier is applied before inventory contents are restored.
 - One terminal uses exactly one eligible nearby core in the MVP. If multiple cores are in range, refuse ambiguous access instead of choosing silently.
-- Validate terminal distance, core distance, player access, core state, ledger revision, capacity, and inventory state on the authoritative side immediately before mutation.
+- Validate terminal distance, core distance, player access, core state, capacity, and inventory state on the authoritative side immediately before mutation.
 - Never trust client-supplied item names, counts, quality, durability, variant, crafter, or custom data as proof of ownership.
-- Aggregate only items whose complete reconstruction-relevant identity matches.
-- Preserve quality, variant, durability, crafter, custom data, and any other fields needed to reconstruct non-stackable items.
-- Reject unsupported or unknown item metadata without changing either the player's inventory or the core.
-- Use a per-core lock, monotonic revision, operation ID, and journal for deposit and withdrawal transactions.
+- The aggregate view must distinguish items by prefab and all metadata that affects item identity; never combine unlike items just because their display names match.
+- Let Valheim's native `Container` inventory serialization preserve item data. Do not add a parallel custom item serializer or ledger unless a verified engine limitation requires one.
+- Use a per-core operation lock and validate inventory changes against the authoritative `Inventory`; handle player/core save boundaries without claiming cross-save atomicity.
 - Never retry a failed mutation blindly.
-- Do not clear malformed or interrupted storage data automatically. Block the core, preserve diagnostics, and require a deliberate recovery path.
+- Do not clear unreadable or interrupted storage data automatically. Preserve diagnostics and require a deliberate recovery path.
 - Keep crafting from storage, automatic chest intake, multi-core networks, and wireless access out of the MVP unless the development plan is explicitly updated.
 
 ## UI rule
@@ -91,7 +90,7 @@ When creating or updating RuneStorage custom items, buildable pieces, props, ter
 - Use Jötunn's `GUIManager` for the RuneStorage screen rather than requiring a separate player-facing UI mod.
 - Subscribe to `GUIManager.OnCustomGUIAvailable` and attach the screen beneath Jötunn's scene-safe custom GUI anchor.
 - Use Valheim-styled controls and scaling where available.
-- The UI is a view and request builder. It must never become a second storage authority or trust displayed counts during a transaction.
+- The UI is a searchable, aggregated view and request builder. It must never become a second storage authority or trust displayed counts during a transaction.
 - The existing mission-board panel is a layout reference only:
 
   ```text

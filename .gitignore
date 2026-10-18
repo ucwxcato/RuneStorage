@@ -17,3 +17,5 @@
 /bin/
 /obj/
 /MODS/
+**/bin/
+**/obj/

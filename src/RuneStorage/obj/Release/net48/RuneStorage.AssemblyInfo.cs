@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RuneStorage")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("0.1.3.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.3")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.3+7408f8f8ba52e07077bf5e998a34191031500da3")]
 [assembly: System.Reflection.AssemblyProductAttribute("RuneStorage")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RuneStorage")]
 [assembly: System.Reflection.AssemblyVersionAttribute("0.1.3.0")]

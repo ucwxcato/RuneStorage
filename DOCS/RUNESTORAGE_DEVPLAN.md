@@ -1,23 +1,23 @@
 # RuneStorage - Development Plan
 
-> **Status:** In progress. The Unity terminal visual, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, placement ghost, and placed transform are verified as of 2026-10-18. The Core visual prefab, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, ghost, and placed transform are also verified as of 2026-10-18; Core hover/support/health behavior and storage remain in progress.
+> **Status:** In progress. The Unity terminal visual, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, placement ghost, and placed transform are verified as of 2026-10-18. The Core visual prefab, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, ghost, and placed transform are also verified as of 2026-10-18; Core hover/support/health behavior and storage remain in progress. The storage design now uses the Core's native Valheim `Container` inventory, with 256 slots at Tier I; only the capacity mapping has isolated tests so far. Runtime inventory integration, tier restoration, aggregation, UI, and transactions remain unimplemented.
 >
-> **Purpose:** Add a Valheim digital-storage system with a buildable runestone terminal and a nearby storage core that stores large quantities of items in a searchable, sortable ledger.
+> **Purpose:** Add a Valheim digital-storage system with a buildable runestone terminal and a nearby storage core whose native inventory stores large quantities of items and is presented through a searchable, sortable aggregate view.
 >
-> **Authority:** This is the canonical implementation plan for the RuneStorage plugin. It owns the RuneStorage pieces, storage ledger, terminal interaction, persistence, transactions, packaging, and test gates.
+> **Authority:** This is the canonical implementation plan for the RuneStorage plugin. It owns the RuneStorage pieces, Core inventory and tier capacity, terminal interaction, transactions, packaging, and test gates.
 >
 > **Target:** Valheim with BepInEx and Jotunn, tested through the active Gale profile:
 > `C:\Users\magni\AppData\Roaming\com.kesomannen.gale\valheim\profiles\VHouseholds-Admin`
 
 ## 0. Outcome
 
-The player places a RuneStorage Terminal and one RuneStorage Core within range. The Core can be upgraded in place to increase its capacity. Interacting with the terminal opens a storage screen backed by the Core. The player can deposit items, search and sort stored entries, withdraw exact quantities, and leave the world without losing or duplicating items.
+The player places a RuneStorage Terminal and one RuneStorage Core within range. The Core can be upgraded in place to increase its slot capacity. Interacting with the terminal opens a searchable aggregate view backed by the Core's native Valheim `Container` inventory. The player can deposit items, search and sort displayed item totals, withdraw exact quantities, and leave the world without losing or duplicating items.
 
 The intended happy path is:
 
 ```text
 Build terminal + core -> core is detected nearby -> open terminal -> deposit items
--> ledger shows the combined totals -> search/select an entry -> withdraw an amount
+-> terminal aggregates matching inventory stacks -> search/select an item -> withdraw an amount
 -> save and reload -> the same items remain available exactly once
 ```
 
@@ -32,21 +32,19 @@ These decisions define the MVP. They may be revisited only if implementation evi
 - The terminal AssetBundle is `runestorage_terminal`; its visual prefab is `RuneStorage_Terminal_Visual` and its icon asset is `Assets/RuneStorage/Terminal/Icons/RuneStorage_Terminal_Icon.png`.
 - The RuneStorage Core uses the imported source `Assets/RuneStorage/Core/Source/cyber_core.glb`, visual prefab `RuneStorage_Core_Visual`, build-piece ID `piece_runestorage_core`, icon `Assets/RuneStorage/Core/Icons/RuneStorage_Core_Icon.png`, and AssetBundle `runestorage_core`.
 - The Core's embedded `Animation` clip is its looping idle. It animates `Sphere.001_3` and `Sphere.003_4` through rotation and scale channels. Keep the Animator Controller and animated hierarchy included with the Core visual AssetBundle.
-- The Core uses the cache-verified `piece_chest_wood` named clone as its runtime shell. Remove the inherited `Container` component so the Core cannot become a second chest-based storage ledger.
+- The Core uses the cache-verified `piece_chest_wood` named clone as its runtime shell and retains its inherited native `Container`. Its `Container` inventory is the only stored-item authority; no shadow ledger or second container is allowed.
 - The first buildable piece identity is `piece_runestorage_terminal`.
 - The system has two separate buildable pieces:
   - **RuneStorage Terminal:** a runestone-style interaction point and user interface.
-  - **RuneStorage Core:** the nearby storage authority and persistent item ledger. Capacity tiers are upgrades to this same placed piece, not separate buildables.
-- The terminal does not own item data. The core owns the ledger. If no valid core is available, the terminal refuses storage actions and explains why.
+  - **RuneStorage Core:** the nearby storage authority and persistent native inventory. Capacity tiers are upgrades to this same placed piece, not separate buildables.
+- The terminal does not own item data. The Core's native `Container` owns the inventory. If no valid Core is available, the terminal refuses storage actions and explains why.
 - The MVP uses one core per terminal. If more than one eligible core is in range, the terminal refuses to choose silently and reports that the network is ambiguous. Multi-core networks are a later feature.
 - The initial interaction radius is **12 meters**, authored as a tuning value. The exact distance must be tested against Valheim placement and multiplayer behavior before release.
-- Stage 1 is mass storage, not a small chest:
-  - **20,000 total item units**.
-  - **256 distinct item keys**.
-- A stackable material contributes its full quantity to total item units but normally consumes one item key. A stored entry may exceed a normal inventory stack and is split into normal stacks when withdrawn.
-- Non-stackable items are stored as individual records or as safely equivalent records only when every reconstruction-relevant field matches. Quality, variant, durability, crafter, and custom data must not be flattened into one generic item.
-- The MVP stores items in a virtual ledger. It does not spawn a hidden pile of world containers and does not use the terminal inventory as a second storage authority.
-- The MVP includes deposit, withdrawal, search, sorting, capacity feedback, save/reload persistence, and multiplayer-safe request validation.
+- Stage 1 is mass storage: **Tier I has 256 inventory slots**. A slot holds a normal Valheim stack or one non-stackable item; total item count therefore depends on the mix of items and their normal stack limits.
+- Proposed later capacities double the slot count: Tier II has 512 slots and Tier III has 1,024 slots. Treat these as design targets until tier resizing, inventory loading, and compatibility are verified in-game.
+- The terminal displays one aggregate row for compatible stored stacks, with the sum of their quantities. Items with different prefab identity or item-relevant metadata remain separate rows. Aggregation is presentation only; actual `ItemData` remains in the Core's `Container` inventory.
+- The MVP stores items in the Core's native inventory. It does not spawn a hidden pile of world containers and does not use the terminal inventory as a second storage authority.
+- The MVP includes deposit, withdrawal, search, sorting, slot-capacity feedback, native save/reload persistence, and multiplayer-safe request validation.
 - The terminal UI will use Jotunn's `GUIManager` and Valheim-style UI helpers/anchors rather than requiring a separate player-facing UI mod. The old local mission-board panel is a layout reference only, not a RuneStorage dependency.
 - Crafting from the network is explicitly deferred until the basic storage transaction loop is stable. Nearby workbench and forge discovery belongs to the post-MVP crafting phase.
 - All prefab-based pieces must use Jotunn's registered named-prefab clone path. The implementation must verify the base prefab through `PrefabManager.Cache` before registration and must not guess a name such as `piece_wood`.
@@ -54,13 +52,13 @@ These decisions define the MVP. They may be revisited only if implementation evi
 
 ### Stage capacity model
 
-| Tier | Total item units | Distinct item keys | Status |
-|---|---:|---:|---|
-| Tier I | 20,000 | 256 | Starting capacity |
-| Tier II | 50,000 | 512 | Planned in-place upgrade |
-| Tier III | 100,000 | 1,024 | Planned in-place upgrade |
+| Tier | Inventory slots | Status |
+|---|---:|---|
+| Tier I | 256 | Starting capacity target |
+| Tier II | 512 | Proposed in-place upgrade |
+| Tier III | 1,024 | Proposed in-place upgrade |
 
-Tier II and Tier III values are planning targets only. Their recipes, upgrade items, resource costs, visual feedback, and release timing remain open until Core persistence and transaction tests pass.
+These capacities correspond to a 16-slot inventory width and heights of 16, 32, and 64 rows. Tier II and Tier III remain proposals until the actual Core Container accepts the dimensions and the default chest interaction cannot bypass the active tier. Recipes, upgrade items, resource costs, visual feedback, and release timing also remain open.
 
 ## 2. Goals and non-goals
 
@@ -72,7 +70,7 @@ Tier II and Tier III values are planning targets only. Their recipes, upgrade it
 - Keep the core as the single source of truth for stored items.
 - Make the terminal useful while the core is nearby and clearly unusable when it is missing, too far away, invalid, full, or recovering from a save problem.
 - Keep client requests untrusted and validate every deposit, withdrawal, range check, permission check, and capacity change on the authoritative side.
-- Persist the ledger across world save, reload, server restart, and plugin reload where Valheim exposes a reliable lifecycle hook.
+- Rely on native `Container` save/load for item persistence and persist the Core tier separately through its ZDO state.
 - Package the mod for Thunderstore and deploy the built plugin to the active Gale profile after the release gates pass.
 
 ### Explicitly out of scope for the MVP
@@ -84,7 +82,7 @@ Tier II and Tier III values are planning targets only. Their recipes, upgrade it
 - Cross-world, cross-character, cloud, or external database storage.
 - A custom permission system that bypasses Valheim's existing ward or build-access rules.
 - Automatic item compression, conversion, filtering rules, or logistics pipes.
-- A guaranteed atomic save spanning both Valheim's player inventory file and the core's world data. The implementation must use a journal and safe recovery behavior, but this boundary must be tested and documented honestly.
+- A guaranteed atomic save spanning a player's inventory and the Core's world data. This engine boundary must be tested; do not add a second item ledger just to imply atomicity.
 - Ripped or restricted Valheim assets copied into the repository or distributed in the Thunderstore package.
 
 ## 3. User experience and operational flow
@@ -100,13 +98,13 @@ Tier II and Tier III values are planning targets only. Their recipes, upgrade it
 ### Open and inspect
 
 1. The player interacts with the terminal.
-2. The terminal validates the player, access rules, terminal distance, core distance, core state, and core revision.
+2. The terminal validates the player, access rules, terminal distance, core distance, and core state.
 3. The storage screen opens with:
-   - total used units and total capacity;
-   - distinct-key count and key limit;
+   - occupied slots and the active tier's slot capacity;
+   - total item quantity across all stored stacks;
    - a search field;
    - deterministic sorting;
-   - stored entries with icon, name, available quantity, and whether the entry is stackable or individual;
+   - aggregate item rows with icon, name, summed quantity, and separate rows when item metadata differs;
    - deposit-all and withdrawal controls.
 4. If validation fails, the screen does not open or shows a non-destructive error with a retry path.
 
@@ -114,17 +112,17 @@ Tier II and Tier III values are planning targets only. Their recipes, upgrade it
 
 1. The player selects **Deposit All** or deposits a selected item/quantity.
 2. The server reads the player's real inventory. It does not trust item names, counts, or metadata sent by the client UI.
-3. The server groups compatible stackable items, calculates the capacity delta, and checks the distinct-key limit and serialized-payload limit.
-4. If the operation fits, a journal entry is created, the exact inventory items are removed, and the ledger is committed.
-5. The UI refreshes from the core revision and shows the new aggregate totals.
-6. If the operation does not fit, nothing is removed and the UI reports the remaining item-unit and key capacity.
+3. The server identifies the exact player inventory items and checks whether the Core's native inventory can accept them within the active tier's slot dimensions.
+4. If the operation fits, the server transfers those actual item records to the Core `Inventory`; it does not serialize them into a parallel ledger.
+5. The UI refreshes from the Core inventory and shows aggregate totals computed from the stored stacks.
+6. If the operation does not fit, no item is removed and the UI reports the remaining slot capacity.
 
 ### Withdraw
 
-1. The player selects an entry and a quantity, or chooses one complete non-stackable record.
-2. The server validates that the entry still exists at the requested revision and that the player can receive the resulting inventory stacks.
-3. The ledger reservation is journaled, the item data is reconstructed, and the items are added to the player's inventory.
-4. The ledger commit removes only the reserved amount or records.
+1. The player selects an aggregate row and a quantity, or chooses one complete non-stackable item.
+2. The server resolves the selection against the current Core inventory and validates that the player can receive the requested quantity.
+3. The server removes the exact quantity from the Core inventory and adds the corresponding actual items to the player's inventory using Valheim's inventory APIs.
+4. The UI refreshes from both inventories and reports the committed result.
 5. If the inventory cannot accept the full request, the operation is rejected before mutation or is reduced only when the player explicitly chose an available-space-limited action.
 
 ### Status messages
@@ -159,13 +157,10 @@ RuneStorage/
         RuneStorageVisuals.cs
       Core/
         RuneStorageCore.cs
-        StorageLedger.cs
-        StorageEntry.cs
-        StorageKey.cs
-        StorageCapacity.cs
+        CoreInventory.cs
+        InventoryAggregator.cs
+        CoreTierCapacity.cs
         StorageTransaction.cs
-        StorageJournal.cs
-        StoragePersistence.cs
       Terminal/
         RuneStorageTerminal.cs
         RuneStorageTerminalUi.cs
@@ -189,12 +184,13 @@ RuneStorage/
 |---|---|---|
 | `Plugin` | BepInEx entry point, dependency declaration, config, lifecycle | Storage data or UI state |
 | Piece registration | Verified named clones, recipes, icons, visual attachment | Direct cached-prefab instantiation as the final piece |
-| `RuneStorageCore` | Core identity, range anchor, ledger authority, revision, journal state | Terminal screen state |
-| `StorageLedger` | Entry grouping, capacity math, lookup, sorting, deterministic deltas | Player permission decisions |
-| `StoragePersistence` | Versioned serialization, save/load, migration, corruption handling | Silent data resets |
-| `StorageTransaction` | Deposit/withdraw validation, locks, journal transitions, rollback/refund | UI commands that bypass server validation |
+| `RuneStorageCore` | Core identity, range anchor, native `Container`, tier, transaction state | Terminal screen state or a duplicate item store |
+| `CoreInventory` | Native inventory access, slot-capacity enforcement, item transfer | Search/filter presentation state |
+| `InventoryAggregator` | Grouping compatible inventory stacks, summed totals, lookup, sorting | Mutating item ownership or storing a second copy |
+| `CoreTierCapacity` | Tier-to-width/height mapping and slot-count math | Runtime tier persistence or upgrades |
+| `StorageTransaction` | Deposit/withdraw validation, locks, item transfer, recovery checks | UI commands that bypass server validation |
 | `RuneStorageTerminal` | Interaction point, nearby-core resolution, UI requests | Permanent item ownership |
-| `RuneStorageTerminalUi` | Search, sorting, selection, display, user feedback | Trusting client-supplied quantities or prefab names |
+| `RuneStorageTerminalUi` | Search, sorting, aggregate display, selection, user feedback | Trusting client-supplied quantities or prefab names |
 | `AccessValidator` | Player, distance, build-access, ward, and server-authority checks | Granting access when validation is unavailable |
 | Package script | Clean build output, manifest, README, icon, DLL placement in ZIP | Shipping source, PDB, or unrelated files |
 
@@ -211,14 +207,14 @@ C:\Users\magni\Documents\BotsnCoding\Valheim\Households-REPO\OLDmoddedcatoheim\s
 The first RuneStorage screen should be a single panel with:
 
 - a title and core status line;
-- used units, total units, distinct keys, and key limit;
+- occupied slots, active tier capacity, and total item quantity;
 - a search field;
 - a scrollable item-entry list;
 - per-entry quantity and withdraw controls;
 - `Deposit All` and close buttons;
 - a visible error/status area for missing cores, full capacity, stale selections, and recovery mode.
 
-The UI is a view and request builder. It must never become a second ledger or trust its own displayed counts as transaction authority.
+The UI is a searchable, aggregated view and request builder. It must never become a second inventory or trust its displayed counts as transaction authority. The Core's normal chest interaction must not expose rows above the active tier or permit bypassing the terminal's capacity and access checks; choose and test an explicit interaction policy before enabling storage.
 
 ### Prefab and asset pipeline
 
@@ -308,31 +304,23 @@ The implementation must not create the final piece by directly instantiating a c
 
 ## 5. Data, lifecycle, and failure handling
 
-### Storage identity and capacity
+### Inventory capacity and aggregate identity
 
-The ledger needs two related concepts:
+The Core's native `Container` and `Inventory` are the sole stored-item data. Tier capacity is a number of inventory slots; normal Valheim max-stack behavior remains in force. Current proposed dimensions are:
 
-- **Total item units:** the number of physical items represented by the ledger.
-- **Distinct item keys:** the number of different records needed to reconstruct those items.
+| Tier | Width | Height | Slots |
+|---|---:|---:|---:|
+| Tier I | 16 | 16 | 256 |
+| Tier II | 16 | 32 | 512 |
+| Tier III | 16 | 64 | 1,024 |
 
-The key must include every `ItemDrop.ItemData` field that changes the resulting item or its behavior. The exact field map must be checked against the Valheim assemblies used by the project before implementation. The planned identity includes:
+Tier I's 256 slots are the starting target. Tier II and Tier III remain proposals pending runtime validation of expansion and saved-tier restoration. These are slot limits, not fixed item-unit guarantees: one occupied slot may hold a stack, and stack sizes differ by item.
 
-| Item category | Planned grouping rule |
-|---|---|
-| Stackable material | Aggregate only when prefab identity and all reconstruction-relevant metadata match |
-| Stackable item with variant/quality/custom data | Keep separate from otherwise similar items when those fields differ |
-| Equipment or tool | Preserve each distinct item record when durability, quality, variant, crafter, or custom data differs |
-| Unsupported or unknown metadata | Reject the operation without changing the player's inventory or the ledger |
+The terminal aggregates the current Core inventory for display. It must compare exact prefab identity and all fields that affect stack compatibility or item identity (including quality, variant, durability, crafter, and custom data as applicable). Stack count and inventory grid position are not identity. Unlike items must never be merged in the view. Aggregation is read-only and does not create substitute `ItemData` records.
 
-Stage 1 constraints are:
+The project's local Valheim assembly was inspected. `Container.Awake()` creates an `Inventory`; `Container.Save()` serializes it through `Inventory.Save(ZPackage)` into the Core's ZDO, and `Container.Load()` restores it through `Inventory.Load(ZPackage)`. `Inventory.SetHeight(Int32)` exists and changes the inventory's logical height. RuneStorage should rely on this native item persistence rather than duplicate Valheim's item serializer. Persist the Core tier separately in its ZDO, then apply the tier dimensions before Container loading restores inventory positions. Confirm the actual component `Awake`/`Load` order in-game or by local assembly inspection before wiring this sequence; the buildable prefab currently destroys the inherited `Container`, which must be revised before the Core can store anything.
 
-```text
-total_item_units <= 20000
-distinct_item_keys <= 256
-serialized_payload <= the measured safe core-data budget
-```
-
-The serialized-payload condition is intentional. A nominal item count must never be allowed to create an unreadable world object. The safe budget must be measured against the actual Valheim/Jotunn persistence API during Phase 0 and enforced before a mutation.
+The standalone capacity mapping in `src/RuneStorage/Core/CoreTierCapacity.cs` is covered by isolated tests. It does not resize a live `Inventory`, attach a `Container` to the Core, aggregate items, or verify save/load.
 
 ### Core lifecycle states
 
@@ -340,67 +328,43 @@ The serialized-payload condition is intentional. A nominal item count must never
 Unregistered
   -> Ready
   -> Full
+  -> TierStateInvalid
   -> RecoveryRequired
-  -> CorruptReadOnly
   -> Destroyed / Unloaded
 ```
 
 - `Ready`: reads and writes are permitted after validation.
-- `Full`: reads remain available; deposits that exceed capacity are rejected without mutation.
-- `RecoveryRequired`: the journal contains an unfinished operation; new writes are blocked until recovery completes.
-- `CorruptReadOnly`: the payload cannot be decoded or migrated; reads are limited to diagnostics and no destructive reset is allowed.
+- `Full`: reads remain available; deposits that exceed the active slot capacity are rejected without mutation.
+- `TierStateInvalid`: the separately persisted tier is outside the supported range; block writes rather than guessing a smaller capacity.
+- `RecoveryRequired`: an observed interrupted transfer cannot yet be reconciled; new writes are blocked until it is handled.
 - `Destroyed / Unloaded`: no new request may use the core reference.
 
-### Persistence format
+### Native inventory persistence and tier state
 
-Use a versioned compact format rather than unbounded ad hoc strings. The planned record contains:
+Valheim's `Container` owns persistence for the Core inventory. RuneStorage must not mirror item records, serialize a second ledger, or silently clear the Container if loading fails. Persist only RuneStorage-owned state separately, initially the Core's capacity tier and any small transaction/recovery marker proven necessary by testing.
 
-```text
-schemaVersion
-capacityTier
-ledgerRevision
-totalItemUnits
-distinctKeyCount
-entry records
-journal record, when an operation is in progress
-checksum or equivalent integrity marker
-```
+On a new Core with no saved tier, initialize Tier I. On a loaded Core, validate the persisted tier and apply its width/height before native Container contents are loaded. If the tier is unknown or the inventory cannot be restored safely, block writes and preserve diagnostic state; never replace the inventory with an empty one. Verify that increasing height preserves all existing item positions and that a save/reload at each tier retains every item.
 
-The format must support:
-
-- deterministic ordering for stable saves and debugging;
-- schema migration from the first released version;
-- a bounded payload size check before commit;
-- a diagnostic export or log summary without printing private item data unnecessarily;
-- refusing to load malformed data without replacing it with an empty core.
+Do not impose an artificial serialized item-payload limit on the native Container path. Test the game's existing ZDO save behavior at the intended slot capacities and document any engine limit discovered.
 
 ### Transaction rules
 
-Every deposit and withdrawal is a server-authoritative transaction:
+Every deposit and withdrawal is a server-authoritative transfer between the player's inventory and the Core inventory:
 
 1. Validate the sender, player state, distance, access, target core, core revision, and request shape.
 2. Acquire a per-core operation lock.
-3. Re-read the relevant player inventory or ledger entries.
-4. Calculate the exact before/after delta.
-5. Check capacity, key count, payload size, and inventory space before mutation.
-6. Write a journal intent with a unique operation ID.
-7. Mutate the player inventory and ledger in the chosen safe order.
-8. Commit the new revision and clear the journal only after the operation is complete.
-9. Send the result and the new revision to the UI.
-10. Release the lock in a `finally`-equivalent cleanup path.
+3. Re-read the exact source and destination inventory state.
+4. Calculate the exact before/after item and slot delta.
+5. Check active tier capacity and destination inventory space before mutation.
+6. Transfer exact existing item records through Valheim's inventory APIs without creating a duplicate item store.
+7. Confirm the actual transfer result, update any small Core change counter used for stale UI requests, and refresh the UI from authoritative inventories.
+8. Release the lock in a `finally`-equivalent cleanup path.
 
 The implementation must never accept a client-supplied prefab name, item count, quality, or metadata as proof that the player owns an item. The server reads the actual inventory and matches the requested operation to it.
 
 ### Interrupted operations
 
-If a disconnect, save, or plugin unload occurs during a transaction:
-
-- the journal remains visible to the next load;
-- the core enters `RecoveryRequired` instead of accepting new writes;
-- recovery compares the journal's expected delta with the available player/core state;
-- the system either completes the recorded operation exactly once or refunds the reserved side without silently duplicating it;
-- if the player is unavailable or the state cannot be reconciled, the core stays blocked and logs a precise recovery reason;
-- no recovery path clears the ledger or destroys the journal automatically.
+If a disconnect, save, or plugin unload occurs during a transaction, test whether Valheim's inventory APIs can leave a partial transfer across the player's character save and the Core's world save. The normal operation must never report success unless both sides reflect the exact transfer. Only add a compact operation marker/recovery path if an observed engine boundary requires it; do not duplicate full item data into a custom journal. If recovery cannot safely reconcile the two inventories, block further writes and report the precise reason rather than guessing or clearing data.
 
 The plan must include a documented limitation for the boundary between world-object persistence and character-inventory persistence. A successful normal transaction is required to be loss-free in testing; crash behavior must be verified and any remaining engine limitation must be visible to the player rather than hidden.
 
@@ -413,9 +377,6 @@ The first configuration file should expose only values that are safe to tune wit
 ```ini
 [Storage]
 CoreRangeMeters = 12
-Stage1TotalItemUnits = 20000
-Stage1DistinctItemKeys = 256
-AllowNonStackableItems = true
 EnableDebugLogging = false
 
 [Access]
@@ -425,7 +386,7 @@ UseValheimBuildAndWardAccess = true
 ItemsPerPage = 40
 ```
 
-The capacity defaults are authored targets. The implementation must clamp invalid values and log the effective values at startup. A configuration change must not silently shrink an existing core below its stored contents.
+Tier slot counts are defined by the tier map, not user configuration. Do not silently lower a Core's tier or hide occupied slots if the supported dimensions change in a later version.
 
 ### Dependencies
 
@@ -457,13 +418,13 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 
 - Treat every client UI request as untrusted.
 - Validate the player and core on the server immediately before mutation.
-- Use a per-core lock and monotonic revision to reject stale requests.
+- Use a per-core lock and a Core inventory-change counter (or equivalent verified state) to reject stale requests.
 - Re-read the actual inventory for deposits.
-- Reserve exact ledger entries for withdrawals.
-- Use an operation journal with unique IDs and recovery states.
+- Resolve withdrawals against exact current Core inventory entries and mutate those entries only.
+- Add an operation journal only if testing demonstrates it is needed to recover a real cross-save partial-transfer case; never store a second copy of item records in it.
 - Never retry a mutation blindly after an exception.
 - Do not clear a stuck or corrupt core as a convenience action.
-- Log operation ID, core ID, player ID, old revision, new revision, and outcome without logging full custom item data by default.
+- Log operation ID, core ID, player ID, inventory-change counter, and outcome without logging full custom item data by default.
 
 ### Placement and prefab safety
 
@@ -478,7 +439,7 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 
 - Missing base prefab: log the candidate names and abort only that piece registration; do not create a broken fallback clone.
 - Missing custom visual or bundle: register a clearly logged fallback only if the fallback was explicitly designed and verified; otherwise fail the visual registration without a broken runtime object.
-- Ledger decode failure: enter read-only or blocked recovery mode; never replace data with an empty ledger.
+- Invalid persisted tier or failed inventory load: block writes and preserve diagnostic state; never replace the Core inventory with an empty one.
 - Capacity failure: reject the whole operation before mutation.
 - Invalid or unsupported item metadata: leave the original inventory untouched.
 - Multiple nearby cores: refuse ambiguous access in the MVP.
@@ -494,21 +455,21 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 | Terminal placement ghost | Ghost appears with valid support/hover behavior | In-game screenshot or video plus log |
 | Core placement ghost | Core places without `WearNTear`, `ZNetView`, health, or support errors | In-game placement check and console log |
 | No nearby core | Terminal refuses storage and gives the no-core message | Manual test and log |
-| One core in range | Terminal opens the correct core | Manual test with core identity/revision log |
+| One core in range | Terminal opens the correct core | Manual test with core identity/inventory-change log |
 | Multiple cores in range | Terminal refuses ambiguity without moving items | Manual test and log |
-| Deposit one stack | Exact amount leaves inventory and appears in the ledger | Before/after inventory and ledger count |
-| Deposit many stacks | Compatible stacks aggregate into one entry and total units are correct | Ledger display and serialized record inspection |
-| 20,000-unit boundary | Final fitting deposit succeeds; excess deposit changes nothing | Capacity test with exact counts |
-| 256-key boundary | Final fitting key succeeds; next new key is rejected without mutation | Key-count test |
+| Tier I capacity | Core accepts items up to 256 inventory slots and rejects overflow without removing player items | In-game boundary test with occupied-slot counts |
+| Tier expansion | Height increase preserves all item positions and unlocks only the new rows | Runtime test from 256 to 512 and 1,024 slots |
+| Deposit one stack | Exact amount leaves player inventory and appears in Core inventory | Before/after inventory counts |
+| Deposit many stacks | Compatible stacks appear as one aggregate row with correct summed quantity | Terminal display compared with Core inventory |
 | Non-stackable equipment | Quality, durability, variant, crafter, and custom data survive storage/withdrawal | Item field comparison before and after |
-| Search and sorting | Results are deterministic and do not change the ledger | UI test across refreshes |
-| Partial withdrawal | Requested amount is removed from the ledger and added to inventory exactly once | Before/after counts |
+| Search and sorting | Results are deterministic and do not change either inventory | UI test across refreshes |
+| Partial withdrawal | Requested amount leaves Core inventory and reaches player inventory exactly once | Before/after counts |
 | No inventory space | Withdrawal is rejected or reduced only by an explicit user action | Inventory-full test |
 | Save and reload | Stored items remain available with the same totals and metadata | World reload test |
-| Plugin restart | Core loads without resetting data | Restart log and ledger comparison |
+| Plugin restart | Core's native Container inventory loads without resetting data | Restart log and before/after inventory comparison |
 | Interrupted deposit | Recovery does not duplicate or silently lose the operation | Forced disconnect/save-boundary test |
 | Interrupted withdrawal | Reserved items are restored or delivered exactly once | Forced disconnect/save-boundary test |
-| Malformed payload | Core becomes blocked/read-only and preserves diagnostic data | Corruption test and log |
+| Invalid saved tier | Core blocks writes and preserves the existing native inventory | Controlled tier-state test and log |
 | Multiplayer access | Server validates requests; a stale or out-of-range client request fails | Host/client test with logs |
 | Destruction/unload | Terminal stops using a destroyed/unloaded core | Manual test and no stale-reference errors |
 | Package contents | ZIP contains only approved release files | ZIP listing |
@@ -530,7 +491,8 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
  - [x] Record the final terminal visual prefab name and AssetBundle label in the project plan before code attaches it to the Jotunn clone.
 - [x] Defer terminal particles for the MVP; use the imported runestone terminal visual as-is.
 - [ ] If an effect is revisited later, inspect it in a separate test prefab before changing the terminal visual.
-- [ ] Map the current Valheim `ItemDrop.ItemData` fields needed to reconstruct stackable and non-stackable items.
+- [x] Inspect the current Valheim `ItemDrop.ItemData` save fields and identify which values are derived from the item prefab.
+- [ ] Implement the runtime item adapter and verify complete serialize/restore round trips before accepting items.
 - [ ] Measure the safe persistence payload budget for the selected ZDO/world-data API.
 - [ ] Define the first schema version and journal state transitions.
 - [ ] **Verify:** The repository has a clean buildable skeleton, the dependency versions are recorded, base prefab names are runtime-verified, and the capacity/persistence constraints are measurable.
@@ -551,7 +513,7 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 ### Phase 2 - Core ledger and persistence
 
 - [ ] Implement `StorageKey` and the metadata-preserving item record model.
-- [ ] Implement Stage 1 capacity math for 20,000 total units and 256 distinct keys.
+- [x] Implement and test Stage 1 capacity math for 20,000 total units and 256 distinct keys in the isolated ledger model; runtime item grouping remains a separate task.
 - [ ] Implement deterministic grouping for compatible stackable items.
 - [ ] Implement individual-record handling for non-stackable items.
 - [ ] Implement the versioned persistence codec with size checks, checksum/integrity validation, and migration hooks.
