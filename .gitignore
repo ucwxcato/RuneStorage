@@ -1,0 +1,19 @@
+# Unity generated data for the RuneStorage project
+/Unity/RuneStorage-Valheim/[Ll]ibrary/
+/Unity/RuneStorage-Valheim/[Tt]emp/
+/Unity/RuneStorage-Valheim/[Oo]bj/
+/Unity/RuneStorage-Valheim/[Bb]uild/
+/Unity/RuneStorage-Valheim/[Bb]uilds/
+/Unity/RuneStorage-Valheim/[Ll]ogs/
+/Unity/RuneStorage-Valheim/[Uu]ser[Ss]ettings/
+
+# Unity-generated IDE files
+/Unity/RuneStorage-Valheim/*.csproj
+/Unity/RuneStorage-Valheim/*.sln
+/Unity/RuneStorage-Valheim/*.slnx
+/Unity/RuneStorage-Valheim/.vs/
+
+# Local build and deployment output
+/bin/
+/obj/
+/MODS/
