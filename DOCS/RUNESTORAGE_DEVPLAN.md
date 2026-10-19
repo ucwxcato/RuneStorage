@@ -1,6 +1,6 @@
 # RuneStorage - Development Plan
 
-> **Status:** In progress. The Unity terminal visual, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, placement ghost, and placed transform are verified as of 2026-10-18. The Core visual prefab, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, ghost, and placed transform are also verified as of 2026-10-18; Core hover/support/health behavior and storage remain in progress. The storage design now uses the Core's native Valheim `Container` inventory, with 256 slots at Tier I; only the capacity mapping has isolated tests so far. Runtime inventory integration, tier restoration, aggregation, UI, and transactions remain unimplemented.
+> **Status:** In progress. The previous Unity terminal visual, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, placement ghost, and placed transform were verified as of 2026-10-18. The replacement `Terminal2_Visual` prefab is wired into registration, and the icon/bundle rebuild is available from Unity; rebuilt bundle, deployment, and in-game appearance/scale are pending. The Core visual prefab, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, ghost, and placed transform are verified as of 2026-10-18. The Core retains its native `Container`, configures Tier I as 16x16, applies the saved tier before native inventory loading, and blocks the Core's inherited chest UI. The terminal has Stored and Deposit tabs, per-item Take/Deposit 1/5/X actions, exact-group Deposit All, deposit-everything, searchable metadata-safe aggregation, stored-item sorting by name or amount in either direction, and faster scrolling. The user confirmed the UI and normal deposits/withdrawals work well, and reported the stored items remained after a restart. Terminal/Core Hammer recipes are configured at the locked costs; in-game recipe visibility remains to be verified. Release build and capacity tests pass; broader boundary, lifecycle, and multiplayer tests remain open.
 >
 > **Purpose:** Add a Valheim digital-storage system with a buildable runestone terminal and a nearby storage core whose native inventory stores large quantities of items and is presented through a searchable, sortable aggregate view.
 >
@@ -29,7 +29,7 @@ These decisions define the MVP. They may be revisited only if implementation evi
 
 - The mod name is **RuneStorage**.
 - The plugin identity is `com.runestorage.valheim`, assembly `RuneStorage`, version `0.1.3` for the initial Core build-piece integration.
-- The terminal AssetBundle is `runestorage_terminal`; its visual prefab is `RuneStorage_Terminal_Visual` and its icon asset is `Assets/RuneStorage/Terminal/Icons/RuneStorage_Terminal_Icon.png`.
+- The terminal AssetBundle is `runestorage_terminal`; its visual prefab asset is `Terminal2_Visual` and its icon asset is `Assets/RuneStorage/Terminal/Icons/RuneStorage_Terminal_Icon.png`.
 - The RuneStorage Core uses the imported source `Assets/RuneStorage/Core/Source/cyber_core.glb`, visual prefab `RuneStorage_Core_Visual`, build-piece ID `piece_runestorage_core`, icon `Assets/RuneStorage/Core/Icons/RuneStorage_Core_Icon.png`, and AssetBundle `runestorage_core`.
 - The Core's embedded `Animation` clip is its looping idle. It animates `Sphere.001_3` and `Sphere.003_4` through rotation and scale channels. Keep the Animator Controller and animated hierarchy included with the Core visual AssetBundle.
 - The Core uses the cache-verified `piece_chest_wood` named clone as its runtime shell and retains its inherited native `Container`. Its `Container` inventory is the only stored-item authority; no shadow ledger or second container is allowed.
@@ -41,6 +41,9 @@ These decisions define the MVP. They may be revisited only if implementation evi
 - The MVP uses one core per terminal. If more than one eligible core is in range, the terminal refuses to choose silently and reports that the network is ambiguous. Multi-core networks are a later feature.
 - The initial interaction radius is **12 meters**, authored as a tuning value. The exact distance must be tested against Valheim placement and multiplayer behavior before release.
 - Stage 1 is mass storage: **Tier I has 256 inventory slots**. A slot holds a normal Valheim stack or one non-stackable item; total item count therefore depends on the mix of items and their normal stack limits.
+- Tier I is a **Bronze Age** unlock. The Core build recipe requires a Forge and costs **10 Bronze, 10 Fine Wood, and 4 Surtling Cores**.
+- The RuneStorage Terminal build recipe costs **10 Fine Wood, 10 Stone, and 2 Surtling Cores**.
+- Tier II and Tier III upgrade costs are still open. Do not change the locked Terminal or Tier I Core recipes without revisiting the progression decision.
 - Proposed later capacities double the slot count: Tier II has 512 slots and Tier III has 1,024 slots. Treat these as design targets until tier resizing, inventory loading, and compatibility are verified in-game.
 - The terminal displays one aggregate row for compatible stored stacks, with the sum of their quantities. Items with different prefab identity or item-relevant metadata remain separate rows. Aggregation is presentation only; actual `ItemData` remains in the Core's `Container` inventory.
 - The MVP stores items in the Core's native inventory. It does not spawn a hidden pile of world containers and does not use the terminal inventory as a second storage authority.
@@ -58,7 +61,7 @@ These decisions define the MVP. They may be revisited only if implementation evi
 | Tier II | 512 | Proposed in-place upgrade |
 | Tier III | 1,024 | Proposed in-place upgrade |
 
-These capacities correspond to a 16-slot inventory width and heights of 16, 32, and 64 rows. Tier II and Tier III remain proposals until the actual Core Container accepts the dimensions and the default chest interaction cannot bypass the active tier. Recipes, upgrade items, resource costs, visual feedback, and release timing also remain open.
+These capacities correspond to a 16-slot inventory width and heights of 16, 32, and 64 rows. Tier II and Tier III remain proposals until the actual Core Container accepts the dimensions and the default chest interaction cannot bypass the active tier. Tier I and Terminal recipe costs are locked above; Tier II/III upgrade items and costs, visual feedback, and release timing remain open.
 
 ## 2. Goals and non-goals
 
@@ -196,7 +199,9 @@ RuneStorage/
 
 ### UI reuse strategy
 
-Jotunn already exposes a GUI layer intended for custom in-game panels. The planned RuneStorage screen should subscribe to `GUIManager.OnCustomGUIAvailable` and attach its panel beneath Jotunn's scene-safe custom GUI anchors, using the Valheim-styled controls and scaling behavior exposed by that manager. This avoids making RuneStorage depend on a separate end-user UI mod that may not expose a stable developer API.
+Jotunn already exposes a GUI layer intended for custom in-game panels. RuneStorage subscribes to `GUIManager.OnCustomGUIAvailable` and attaches its panel beneath `GUIManager.CustomGUIFront`, using Jotunn's wood panel, scroll view, text, input-field, and button helpers. This avoids making RuneStorage depend on a separate end-user UI mod that may not expose a stable developer API.
+
+**Design Read:** In-game item-storage panel for Valheim players, in Valheim's native wood-panel language, with ENERGY 1 / RHYTHM 1 / MOTION 1. Jotunn's panel and Averia/Norse fonts keep the screen visually in-world; the dark inset gives the list a stable reading surface; warm gold is reserved for the title and item totals so quantities are easy to scan; the single predictable list suits search and repeated inventory rows; no motion is used because it would distract from item selection.
 
 The existing local file below contains useful patterns for panels, buttons, scroll views, and TextMeshPro rows, but its canvas lifecycle must not be copied blindly. RuneStorage should adapt the layout ideas to Jotunn's custom-GUI lifecycle and destroy/refresh its panel cleanly on scene changes:
 
@@ -204,7 +209,7 @@ The existing local file below contains useful patterns for panels, buttons, scro
 C:\Users\magni\Documents\BotsnCoding\Valheim\Households-REPO\OLDmoddedcatoheim\src\MissionSystemMod\MissionBoardPanel.cs
 ```
 
-The first RuneStorage screen should be a single panel with:
+The first RuneStorage screen is implemented as a single panel with:
 
 - a title and core status line;
 - occupied slots, active tier capacity, and total item quantity;
@@ -214,7 +219,7 @@ The first RuneStorage screen should be a single panel with:
 - `Deposit All` and close buttons;
 - a visible error/status area for missing cores, full capacity, stale selections, and recovery mode.
 
-The UI is a searchable, aggregated view and request builder. It must never become a second inventory or trust its displayed counts as transaction authority. The Core's normal chest interaction must not expose rows above the active tier or permit bypassing the terminal's capacity and access checks; choose and test an explicit interaction policy before enabling storage.
+The UI is a searchable, aggregated view and request builder. It never becomes a second inventory or trusts its displayed counts as transaction authority. The Core's normal chest interaction is suppressed. Source-level transfers re-resolve the Core and access state, require the local process to own the Core's ZNetView, and move the original `ItemData` between native inventories. A client that does not own the Core can inspect its local snapshot but cannot transfer. A network request path for remote peers is still required before multiplayer transfers can be enabled.
 
 ### Prefab and asset pipeline
 
@@ -231,7 +236,7 @@ author-made visual or approved local asset
 
 The terminal visual should be runestone-like. The exact vanilla base prefab name is **TBD until `PrefabManager.Cache` is inspected at runtime**. For the Core build-piece runtime shell, verify the selected vanilla base name through `PrefabManager.Cache` before registration. The plan must not invent a base name.
 
-### Selected terminal visual source
+### Previous terminal visual source
 
 The selected source for the terminal visual is:
 
@@ -263,6 +268,16 @@ Keep the original source file in `ASSETS-Repo`. Import or stage a working copy i
 - the final AssetBundle prefab name is recorded before plugin registration.
 
 The GLB has no animation data, so it is a static terminal visual. Do not add animation-specific runtime code unless a later replacement asset requires it.
+
+### Current terminal visual prefab
+
+The replacement prefab supplied in the Unity project is:
+
+```text
+Unity\RuneStorage-Valheim\Assets\RuneStorage\Terminal\Prefabs\Terminal2_Visual.prefab
+```
+
+Its serialized root scale is `(4, 4, 4)`. Runtime attachment must preserve the prefab-authored scale and facing; `TerminalVisualAnchor` may recenter the model by changing position only. The RuneStorage terminal icon must be rendered from this prefab, and the `runestorage_terminal` AssetBundle must contain this prefab instead of the previous terminal visual. Bundle rebuild and in-game visual/scale confirmation remain pending.
 
 ### Selected Core visual source
 
@@ -485,15 +500,17 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
  - [x] Confirm the assembly references and build conventions that are actually available to RuneStorage. Do not copy identifiers or deployment files from another mod.
  - [x] Choose and record the plugin GUID, first package version, namespace, terminal piece ID, visual prefab name, icon asset path, and bundle name.
 - [x] Record the runtime-verified `PrefabManager.Cache` base prefab used by the terminal and Core: `piece_chest_wood`; keep checking it at registration time.
-- [ ] Decide whether the first visual comes from an approved author-made AssetBundle or a verified vanilla base visual with a custom child.
+- [x] Use the user-supplied `Terminal2_Visual` prefab as the terminal's custom AssetBundle visual.
 - [x] Stage `terminal1.glb` into the Unity asset project without altering the original source file.
 - [x] Inspect `terminal1.glb` in Unity and confirm scale, orientation, pivot, embedded materials/textures, collider behavior, and the intended terminal prefab root.
- - [x] Record the final terminal visual prefab name and AssetBundle label in the project plan before code attaches it to the Jotunn clone.
+- [x] Record `Terminal2_Visual` and the `runestorage_terminal` AssetBundle label before attaching it to the Jotunn clone.
 - [x] Defer terminal particles for the MVP; use the imported runestone terminal visual as-is.
 - [ ] If an effect is revisited later, inspect it in a separate test prefab before changing the terminal visual.
 - [x] Inspect the local Valheim `Container`, `Inventory.Save/Load`, and `Inventory.SetHeight` APIs; confirm the native Container persists inventory through its ZDO.
-- [ ] Verify in-game component initialization/load order and identify a safe point to apply the Core's saved tier before Container contents load.
-- [ ] Decide and test how the Core's built-in chest interaction is disabled or constrained so it cannot bypass the terminal's access and tier rules.
+- [x] Inspect the local Valheim assembly: `Container.Awake` creates the inventory from prefab dimensions and schedules `CheckForChanges`; its `Load` reads the inventory blob from the Core ZDO.
+- [x] Apply the persisted tier in a Harmony prefix before the private `Container.Load` method restores inventory contents.
+- [x] Add Core-only Harmony guards for native `Container.Interact` and hover text; non-RuneStorage containers pass through unchanged.
+- [ ] Verify in-game placement, tier load, interaction suppression, and save/reload against the active Gale profile.
 - [ ] **Verify:** The repository has a clean buildable skeleton, the dependency versions are recorded, base prefab names are runtime-verified, and the capacity/persistence constraints are measurable.
 
 ### Phase 1 - Plugin and safe piece registration
@@ -503,24 +520,27 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
  - [x] Register the terminal with `new CustomPiece(customName, verifiedBasePrefabName, pieceConfig)` using a verified base name.
 - [x] Register the Core with the same named-clone path and its unique piece, visual, icon, and bundle identifiers.
 - [x] Attach the terminal/Core visuals after cloning and before adding each piece to its Jotunn manager.
-- [x] Attach the built terminal visual from `terminal1.glb` after the named Jotunn terminal clone is created, disabling only the base renderers that the visual replaces.
+- [ ] Rebuild the terminal icon and bundle from `Terminal2_Visual`, then verify the runtime preserves its `(4, 4, 4)` scale and placement alignment in-game.
 - [x] Do not attach a smoke or particle effect to the MVP terminal.
-- [ ] Add distinct icons and Hammer recipes once the visual and piece identities are stable.
+- [x] Add distinct icons and configure the Hammer recipes after visual and piece identities stabilized; the Core requires a Forge.
 - [x] Add startup logs for plugin version, resolved base prefabs, piece names, and registration result; the 0.1.3 profile log confirms both bundles and pieces registered with `piece_chest_wood`.
 - [ ] **Verify:** Both pieces appear as valid buildable objects and their ghosts/placement work. The user confirmed Core ghost and placed alignment on 2026-10-18; hover/support/health checks still need testing.
 
 ### Phase 2 - Native Core inventory and tier capacity
 
 - [x] Define and test the slot dimensions for Tier I (256 slots) and proposed Tier II/III capacities (512/1,024 slots) in an isolated capacity model.
-- [ ] Retain the named-cloned Core `Container` and configure its base inventory dimensions for Tier I.
-- [ ] Add a Core component that binds to the native `Container`/`Inventory` without introducing a second item store.
-- [ ] Persist only the Core capacity tier separately in its ZDO and apply it safely before native inventory load.
-- [ ] Implement read-only aggregate grouping for compatible Core inventory items, retaining separate entries when item metadata differs.
+- [x] Retain the named-cloned Core `Container` and configure its base inventory dimensions for Tier I.
+- [x] Add a Core marker and runtime tier hook that use the native `Container`/`Inventory` without introducing a second item store.
+- [x] Persist the Core capacity tier separately in its ZDO and apply it before native inventory load.
+- [ ] Verify in-game that Tier I has 256 usable slots and saved tier changes load before item positions are restored.
+- [x] Implement read-only aggregate grouping for compatible Core inventory items, retaining separate entries when item metadata differs.
 - [ ] Implement `Ready`, `Full`, and invalid-tier/transfer-recovery states as needed by verified runtime behavior.
 - [ ] Test occupied-slot counts, item identity preservation, height expansion, and native save/reload at each supported tier.
 - [ ] **Verify:** A placed Core saves and reloads its native Container contents, preserves all item metadata, and enforces its active slot capacity without a parallel ledger.
 
 ### Phase 3 - Server-authoritative transactions
+
+The current source includes owner-local transfer methods as a development slice. The complete phase remains open: remote clients cannot submit transfers, and interruption recovery, stale-request validation, and host/client synchronization have not been proven.
 
 - [ ] Implement the per-core operation lock and stale-inventory-change check.
 - [ ] Implement deposit preview without mutation.
@@ -532,17 +552,21 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 
 ### Phase 4 - Terminal interaction and UI
 
-- [ ] Implement nearby-core resolution using the configured radius and the one-core-only MVP rule.
-- [ ] Implement terminal interaction state and direct no-core/ambiguous-core/recovery messages.
-- [ ] Subscribe the screen to Jotunn `GUIManager.OnCustomGUIAvailable` and attach it to the scene-safe custom GUI anchor instead of maintaining an unmanaged permanent canvas.
-- [ ] Reuse the local mission-board panel's proven layout ideas for a scroll view, buttons, and TextMeshPro rows while adapting lifecycle and styling to Jotunn.
-- [ ] Implement the storage screen with occupied slots, active tier capacity, total item quantity, search, deterministic sorting, aggregate rows/icons, deposit-all, and withdrawal controls.
-- [ ] Refresh the screen from the live Core inventory after every successful mutation and reject stale selections.
-- [ ] Add clear full-capacity, unsupported-item, inventory-full, and data-error feedback.
+- [x] Implement nearby-core resolution using the configured radius and the one-core-only MVP rule.
+- [x] Implement terminal interaction state and direct no-core/ambiguous-core/recovery messages.
+- [x] Subscribe the screen to Jotunn `GUIManager.OnCustomGUIAvailable` and attach it to the scene-safe custom GUI anchor instead of maintaining an unmanaged permanent canvas.
+- [x] Use Jotunn's wood panel, scroll view, buttons, inputs, and Valheim fonts; keep the UI under Jotunn's scene-managed anchor.
+- [x] Implement Stored and Deposit tabs with occupied slots, active tier capacity, total item quantity, search, deterministic sorting, aggregate rows/icons, per-item Take/Deposit 1/5/X/All, and deposit-everything controls.
+- [x] Add Stored-tab Name/Amount sort controls with an ascending/descending arrow toggle.
+- [x] Set terminal list scroll sensitivity to 300 after follow-up feedback that the previous setting was still too slow; verify the new rate in-game.
+- [x] **Runtime confirmation (2026-10-19):** The user confirmed the UI works well and normal deposit/withdraw transfers work flawlessly.
+- [x] Refresh the screen from the live Core inventory after every successful mutation and reject stale selections.
+- [x] Add readable feedback for missing/ambiguous cores, invalid data, full storage, stale selections, and player-inventory capacity.
 - [ ] **Verify:** A player can place the two pieces, open the terminal, deposit a large material batch, find it by search, withdraw a chosen amount, and see correct status after moving the core out of range.
 
 ### Phase 5 - Multiplayer, reload, and hardening
 
+- [x] **User-reported smoke check (2026-10-19):** Stored items appeared to remain safe after restarting the game. This does not replace larger-scale save/reload or interrupted-transfer testing.
 - [ ] Run host/client tests with matching and mismatched plugin versions.
 - [ ] Validate server-side ownership/access behavior against the selected Valheim ward/build-access API.
 - [ ] Test simultaneous deposit and withdrawal requests against the same core.
@@ -553,6 +577,7 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 
 ### Phase 6 - Upgrade path and post-MVP systems
 
+- [ ] Add an Upgrade tab showing current/next tier and capacity, required versus available materials, and an in-place upgrade action.
 - [ ] Add an in-place upgrade path that persists the Core's capacity tier without changing its build-piece identity.
 - [ ] Define and implement the Tier II upgrade item, recipe, validation, and visual/status feedback.
 - [ ] Add Tier III only after Tier II persistence and migration tests pass.
@@ -580,7 +605,7 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 - Plugin GUID and author/package owner.
 - Exact terminal and core base prefab names after runtime cache inspection.
 - Whether the terminal uses a custom AssetBundle visual or an approved vanilla runestone visual with custom children.
-- Exact Hammer category and recipe costs.
+- Exact Tier II and Tier III upgrade recipes, stations, and resource costs.
 - Whether the first public MVP permits non-stackable equipment or initially limits storage to safely reconstructable stackable items.
 - Whether native Container persistence or inventory UI behavior imposes a practical slot ceiling below the proposed tiers.
 - The precise recovery behavior available when a player disconnects between a world-object save and a character-inventory save.

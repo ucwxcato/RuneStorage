@@ -9,24 +9,24 @@ namespace RuneStorage.EditorTools
 {
     public static class RuneStorageTerminalIconRenderer
     {
-        private const string PrefabPath = "Assets/RuneStorage/Terminal/Prefabs/RuneStorage_Terminal_Visual.prefab";
+        private const string PrefabPath = "Assets/RuneStorage/Terminal/Prefabs/Terminal2_Visual.prefab";
+        private const string PreviousPrefabPath = "Assets/RuneStorage/Terminal/Prefabs/RuneStorage_Terminal_Visual.prefab";
         private const string IconPath = "Assets/RuneStorage/Terminal/Icons/RuneStorage_Terminal_Icon.png";
         private const string BundleName = "runestorage_terminal";
         private const int IconSize = 256;
 
         [MenuItem("RuneStorage/Render Terminal Icon")]
-        private static void RenderTerminalIcon()
+        public static void RenderTerminalIcon()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
             if (prefab == null)
             {
-                EditorUtility.DisplayDialog("RuneStorage icon", $"Prefab not found:\n{PrefabPath}", "OK");
+                ShowDialog("RuneStorage icon", $"Prefab not found:\n{PrefabPath}", true);
+                if (Application.isBatchMode) throw new FileNotFoundException("RuneStorage terminal visual prefab was not found.", PrefabPath);
                 return;
             }
 
-            var previousScene = SceneManager.GetActiveScene();
-            var previewScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
-            SceneManager.SetActiveScene(previewScene);
+            var previewScene = EditorSceneManager.NewPreviewScene();
 
             GameObject previewRoot = null;
             Camera previewCamera = null;
@@ -37,6 +37,7 @@ namespace RuneStorage.EditorTools
             try
             {
                 previewRoot = new GameObject("RuneStorage_Terminal_Icon_Preview");
+                SceneManager.MoveGameObjectToScene(previewRoot, previewScene);
 
                 var model = Object.Instantiate(prefab);
                 model.name = "RuneStorage_Terminal_Visual";
@@ -46,7 +47,8 @@ namespace RuneStorage.EditorTools
                 var renderers = model.GetComponentsInChildren<Renderer>(true);
                 if (renderers.Length == 0)
                 {
-                    EditorUtility.DisplayDialog("RuneStorage icon", "The terminal prefab has no visible renderers.", "OK");
+                    ShowDialog("RuneStorage icon", "The terminal prefab has no visible renderers.", true);
+                    if (Application.isBatchMode) throw new System.InvalidOperationException("The terminal prefab has no visible renderers.");
                     return;
                 }
 
@@ -113,7 +115,7 @@ namespace RuneStorage.EditorTools
                     importer.SaveAndReimport();
                 }
 
-                EditorUtility.DisplayDialog("RuneStorage icon", $"Created:\n{IconPath}", "OK");
+                ShowDialog("RuneStorage icon", $"Created:\n{IconPath}");
             }
             finally
             {
@@ -144,14 +146,9 @@ namespace RuneStorage.EditorTools
                     Object.DestroyImmediate(previewRoot);
                 }
 
-                if (previewScene.IsValid() && previewScene.isLoaded)
+                if (previewScene.IsValid())
                 {
-                    EditorSceneManager.CloseScene(previewScene, true);
-                }
-
-                if (previousScene.IsValid() && previousScene.isLoaded)
-                {
-                    SceneManager.SetActiveScene(previousScene);
+                    EditorSceneManager.ClosePreviewScene(previewScene);
                 }
             }
         }
@@ -165,7 +162,7 @@ namespace RuneStorage.EditorTools
                 var importer = AssetImporter.GetAtPath(path);
                 if (importer == null)
                 {
-                    EditorUtility.DisplayDialog("RuneStorage bundle", $"Asset not found:\n{path}", "OK");
+                    ShowDialog("RuneStorage bundle", $"Asset not found:\n{path}", true);
                     return;
                 }
 
@@ -173,17 +170,27 @@ namespace RuneStorage.EditorTools
                 importer.SaveAndReimport();
             }
 
+            var previousPrefabImporter = AssetImporter.GetAtPath(PreviousPrefabPath);
+            if (previousPrefabImporter != null && previousPrefabImporter.assetBundleName == BundleName)
+            {
+                previousPrefabImporter.assetBundleName = string.Empty;
+                previousPrefabImporter.SaveAndReimport();
+            }
+
             AssetDatabase.SaveAssets();
-            EditorUtility.DisplayDialog("RuneStorage bundle", $"Prepared prefab and icon with bundle name:\n{BundleName}", "OK");
+            ShowDialog("RuneStorage bundle", $"Prepared prefab and icon with bundle name:\n{BundleName}");
         }
 
         [MenuItem("RuneStorage/Build Terminal AssetBundle")]
-        private static void BuildTerminalAssetBundle()
+        public static void BuildTerminalAssetBundle()
         {
+            PrepareTerminalBundleAssetsForBuild();
+
             var target = EditorUserBuildSettings.activeBuildTarget;
             if (target == BuildTarget.NoTarget)
             {
-                EditorUtility.DisplayDialog("RuneStorage bundle", "Unity has no active build target. Select a Windows build target first.", "OK");
+                ShowDialog("RuneStorage bundle", "Unity has no active build target. Select a Windows build target first.", true);
+                if (Application.isBatchMode) throw new System.InvalidOperationException("Unity has no active AssetBundle build target.");
                 return;
             }
 
@@ -197,11 +204,67 @@ namespace RuneStorage.EditorTools
 
             if (manifest == null)
             {
-                EditorUtility.DisplayDialog("RuneStorage bundle", $"Build failed for target {target}. Check the Console for details.", "OK");
+                ShowDialog("RuneStorage bundle", $"Build failed for target {target}. Check the Console for details.", true);
+                if (Application.isBatchMode) throw new System.InvalidOperationException($"Unity failed to build the terminal AssetBundle for {target}.");
                 return;
             }
 
-            EditorUtility.DisplayDialog("RuneStorage bundle", $"Built terminal bundle for {target}:\n{outputDirectory}", "OK");
+            var builtBundlePath = Path.Combine(outputDirectory, BundleName);
+            if (!File.Exists(builtBundlePath))
+            {
+                throw new FileNotFoundException("The RuneStorage terminal AssetBundle output is missing.", builtBundlePath);
+            }
+
+            var sourceBundlePath = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../src/RuneStorage/Assets/AssetBundles/runestorage_terminal"));
+            Directory.CreateDirectory(Path.GetDirectoryName(sourceBundlePath));
+            File.Copy(builtBundlePath, sourceBundlePath, true);
+
+            var message = $"Built terminal bundle for {target}:\n{outputDirectory}\n\nCopied to:\n{sourceBundlePath}";
+            ShowDialog("RuneStorage bundle", message);
+            Debug.Log(message);
+        }
+
+        [MenuItem("RuneStorage/Rebuild Terminal Icon and AssetBundle")]
+        public static void RebuildTerminalAssetsForRuneStorage()
+        {
+            RenderTerminalIcon();
+            BuildTerminalAssetBundle();
+        }
+
+        private static void PrepareTerminalBundleAssetsForBuild()
+        {
+            var prefabImporter = AssetImporter.GetAtPath(PrefabPath);
+            var iconImporter = AssetImporter.GetAtPath(IconPath);
+            if (prefabImporter == null || iconImporter == null)
+            {
+                throw new FileNotFoundException($"Terminal prefab or icon is missing. Prefab: {PrefabPath}; icon: {IconPath}.");
+            }
+
+            prefabImporter.assetBundleName = BundleName;
+            iconImporter.assetBundleName = BundleName;
+
+            var previousPrefabImporter = AssetImporter.GetAtPath(PreviousPrefabPath);
+            if (previousPrefabImporter != null && previousPrefabImporter.assetBundleName == BundleName)
+            {
+                previousPrefabImporter.assetBundleName = string.Empty;
+                previousPrefabImporter.SaveAndReimport();
+            }
+
+            prefabImporter.SaveAndReimport();
+            iconImporter.SaveAndReimport();
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void ShowDialog(string title, string message, bool isError = false)
+        {
+            if (Application.isBatchMode)
+            {
+                if (isError) Debug.LogError($"{title}: {message}");
+                else Debug.Log($"{title}: {message}");
+                return;
+            }
+
+            EditorUtility.DisplayDialog(title, message, "OK");
         }
 
         private static void CreateLight(Transform parent, string name, Vector3 rotation, float intensity, Color color)

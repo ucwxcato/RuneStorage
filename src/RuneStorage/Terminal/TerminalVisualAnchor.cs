@@ -60,7 +60,7 @@ namespace RuneStorage
                 _loggedAlignments++;
                 Plugin.Log.LogInfo(
                     $"Runtime-centered RuneStorage terminal pass {_loggedAlignments}: " +
-                    $"correction={correction}, finalLocalPosition={_visual.localPosition}.");
+                    $"correction={correction}, finalLocalPosition={_visual.localPosition}, finalLocalScale={_visual.localScale}.");
             }
         }
     }

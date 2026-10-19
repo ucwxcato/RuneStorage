@@ -12,11 +12,10 @@ namespace RuneStorage
     internal static class TerminalPiece
     {
         private const string PieceName = "piece_runestorage_terminal";
-        private const string VisualPrefabName = "RuneStorage_Terminal_Visual";
+        private const string VisualAssetName = "Terminal2_Visual";
+        private const string VisualInstanceName = "RuneStorage_Terminal_Visual";
         private const string IconAssetPath = "Assets/RuneStorage/Terminal/Icons/RuneStorage_Terminal_Icon.png";
         private const string BundleResourceSuffix = ".Assets.AssetBundles.runestorage_terminal";
-        private static readonly Vector3 VisualLocalPosition = new Vector3(5.23f, -0.04f, 5f);
-        private static readonly Quaternion VisualCorrectionRotation = Quaternion.Euler(-90f, 0f, 0f);
 
         private static bool _registered;
         private static AssetBundle _visualBundle;
@@ -29,11 +28,11 @@ namespace RuneStorage
             if (basePrefabName == null) return;
             if (!LoadBundle()) return;
 
-            GameObject visualSource = _visualBundle.LoadAsset<GameObject>(VisualPrefabName);
+            GameObject visualSource = _visualBundle.LoadAsset<GameObject>(VisualAssetName);
             Sprite icon = _visualBundle.LoadAsset<Sprite>(IconAssetPath);
             if (visualSource == null)
             {
-                Plugin.Log.LogError($"RuneStorage terminal visual '{VisualPrefabName}' was not found in the embedded AssetBundle.");
+                Plugin.Log.LogError($"RuneStorage terminal visual '{VisualAssetName}' was not found in the embedded AssetBundle.");
                 return;
             }
 
@@ -52,7 +51,9 @@ namespace RuneStorage
                 Icon = icon,
                 Requirements = new[]
                 {
-                    new RequirementConfig { Item = "SwordCheat", Amount = 1 }
+                    new RequirementConfig { Item = "FineWood", Amount = 10, Recover = true },
+                    new RequirementConfig { Item = "Stone", Amount = 10, Recover = true },
+                    new RequirementConfig { Item = "SurtlingCore", Amount = 2, Recover = true }
                 }
             });
 
@@ -65,11 +66,18 @@ namespace RuneStorage
                 return;
             }
 
+            if (terminal.PiecePrefab.GetComponent<RuneStorageTerminalMarker>() == null)
+            {
+                terminal.PiecePrefab.AddComponent<RuneStorageTerminalMarker>();
+            }
+
             piece.m_canBeRemoved = true;
             PieceManager.Instance.AddPiece(terminal);
             _registered = true;
 
-            Plugin.Log.LogInfo($"Registered {PieceName} with verified base prefab '{basePrefabName}', visual '{VisualPrefabName}', and terminal icon.");
+            Plugin.Log.LogInfo(
+                $"Registered {PieceName} with verified base prefab '{basePrefabName}', visual '{VisualAssetName}', terminal icon, " +
+                "and Hammer costs 10 Fine Wood, 10 Stone, and 2 Surtling Cores.");
         }
 
         private static string FindVerifiedBuildPiecePrefabName()
@@ -102,12 +110,10 @@ namespace RuneStorage
         private static void AttachVisual(GameObject functionalPrefab, GameObject visualSource)
         {
             GameObject visual = UnityEngine.Object.Instantiate(visualSource);
-            visual.name = VisualPrefabName;
+            visual.name = VisualInstanceName;
             visual.SetActive(true);
+            // Keep the prefab's authored scale and facing; TerminalVisualAnchor only recenters its position.
             visual.transform.SetParent(functionalPrefab.transform, false);
-            visual.transform.localPosition = VisualLocalPosition;
-            visual.transform.localRotation = VisualCorrectionRotation;
-            visual.transform.localScale = Vector3.one;
 
             TerminalVisualAnchor anchor = functionalPrefab.GetComponent<TerminalVisualAnchor>();
             if (anchor == null) anchor = functionalPrefab.AddComponent<TerminalVisualAnchor>();

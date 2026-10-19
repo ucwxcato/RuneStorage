@@ -5,6 +5,7 @@ using System.Reflection;
 using Jotunn.Configs;
 using Jotunn.Entities;
 using Jotunn.Managers;
+using RuneStorage.Core;
 using UnityEngine;
 
 namespace RuneStorage
@@ -47,19 +48,36 @@ namespace RuneStorage
                 Category = "RuneStorage",
                 Name = "RuneStorage Core",
                 Description = "The storage core for a nearby RuneStorage Terminal.",
+                CraftingStation = CraftingStations.Forge,
                 Icon = icon,
                 Requirements = new[]
                 {
-                    new RequirementConfig { Item = "SwordCheat", Amount = 1 }
+                    new RequirementConfig { Item = "Bronze", Amount = 10, Recover = true },
+                    new RequirementConfig { Item = "FineWood", Amount = 10, Recover = true },
+                    new RequirementConfig { Item = "SurtlingCore", Amount = 4, Recover = true }
                 }
             });
 
             AttachVisual(core.PiecePrefab, visualSource);
 
-            foreach (Container container in core.PiecePrefab.GetComponentsInChildren<Container>(true))
+            Container[] containers = core.PiecePrefab.GetComponentsInChildren<Container>(true);
+            if (containers.Length != 1)
             {
-                UnityEngine.Object.Destroy(container);
+                Plugin.Log.LogError(
+                    $"RuneStorage Core clone '{PieceName}' must contain exactly one inherited Container; found {containers.Length}. " +
+                    "Refusing to register a Core without a single native storage inventory.");
+                return;
             }
+
+            if (!CoreTierCapacity.TryGetDimensions(1, out int width, out int height))
+            {
+                Plugin.Log.LogError("Tier I RuneStorage Core dimensions are missing; refusing to register the Core.");
+                return;
+            }
+
+            containers[0].m_width = width;
+            containers[0].m_height = height;
+            core.PiecePrefab.AddComponent<RuneStorageCoreMarker>();
 
             Piece piece = core.PiecePrefab.GetComponent<Piece>();
             if (piece == null)
@@ -74,7 +92,8 @@ namespace RuneStorage
 
             Plugin.Log.LogInfo(
                 $"Registered {PieceName} with verified base prefab '{basePrefabName}', visual '{VisualPrefabName}', " +
-                "Core icon, and no inherited chest container.");
+                $"Core icon, Forge requirement, Hammer costs 10 Bronze, 10 Fine Wood, and 4 Surtling Cores, " +
+                $"and native Container capacity {width}x{height} ({width * height} slots).");
         }
 
         private static string FindVerifiedBuildPiecePrefabName()

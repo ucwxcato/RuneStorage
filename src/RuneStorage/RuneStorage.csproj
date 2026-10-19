@@ -16,9 +16,14 @@
     <Reference Include="UnityEngine" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.dll" Private="false" />
     <Reference Include="UnityEngine.CoreModule" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.CoreModule.dll" Private="false" />
     <Reference Include="UnityEngine.AssetBundleModule" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.AssetBundleModule.dll" Private="false" />
+    <Reference Include="UnityEngine.TextRenderingModule" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.TextRenderingModule.dll" Private="false" />
+    <Reference Include="UnityEngine.UI" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.UI.dll" Private="false" />
+    <Reference Include="UnityEngine.InputLegacyModule" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.InputLegacyModule.dll" Private="false" />
     <Reference Include="assembly_valheim" HintPath="../../../Households-REPO/lib/BepInEx/core/assembly_valheim.dll" Private="false" />
     <Reference Include="assembly_utils" HintPath="../../../Households-REPO/lib/BepInEx/core/assembly_utils.dll" Private="false" />
+    <Reference Include="assembly_guiutils" HintPath="../../../Households-REPO/lib/BepInEx/core/assembly_guiutils.dll" Private="false" />
     <Reference Include="Jotunn" HintPath="../../../Households-REPO/lib/BepInEx/core/Jotunn.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="../../../Households-REPO/lib/BepInEx/core/0Harmony.dll" Private="false" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
   </ItemGroup>

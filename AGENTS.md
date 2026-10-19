@@ -12,13 +12,13 @@ DOCS/RUNESTORAGE_DEVPLAN.md
 
 Keep that plan and the implementation synchronized. Do not mark checklist items complete without build, deployment, or runtime evidence at the level the item claims.
 
-The selected RuneStorage Terminal visual source is:
+The current RuneStorage Terminal visual prefab is:
 
 ```text
-C:\Users\magni\Documents\BotsnCoding\Valheim\ASSETS-Repo\assetsetuff\Digital-Storage\Source\terminal1.glb
+C:\Users\magni\Documents\BotsnCoding\Valheim\RuneStorage\Unity\RuneStorage-Valheim\Assets\RuneStorage\Terminal\Prefabs\Terminal2_Visual.prefab
 ```
 
-Treat the original GLB as source material. Do not overwrite it. Stage a working copy in the RuneStorage Unity project, verify its scale, orientation, pivot, materials, embedded textures, and collider behavior, then export the approved visual as the RuneStorage AssetBundle prefab.
+The earlier `terminal1.glb` visual is retained as a previous asset, not the active terminal. Preserve the replacement prefab's authored transform, including its `(4, 4, 4)` root scale. Runtime alignment may recenter it by position only. When replacing the terminal visual, render the in-game icon from the active prefab and ensure `runestorage_terminal` packages that same prefab rather than the previous one.
 
 The selected RuneStorage Core visual source is:
 
@@ -72,9 +72,11 @@ When creating or updating RuneStorage custom items, buildable pieces, props, ter
 
 - The RuneStorage Core's inherited Valheim `Container` and `Inventory` are the single authoritative storage inventory. The terminal is an interaction point and view/request UI, not a second inventory or item ledger.
 - Capacity is measured in inventory slots, not a promised number of item units or distinct item keys. Tier I is 256 slots; proposed later tiers double that capacity to 512 and 1,024 slots. Normal Valheim stack limits apply, so total item count depends on the stored item mix.
+- Locked build recipes: RuneStorage Terminal costs 10 Fine Wood, 10 Stone, and 2 Surtling Cores. The Tier I Core costs 10 Bronze, 10 Fine Wood, and 4 Surtling Cores, and requires a Forge as its Bronze Age gate. Tier II and Tier III upgrade costs remain undecided.
 - The terminal presents a searchable aggregate view: compatible stacks are grouped into one displayed item row with their summed quantity, while items whose identity-relevant metadata differs remain separate. Search and sorting only affect the view.
 - RuneStorage has one buildable Core identity (`piece_runestorage_core`). Capacity tiers belong to that placed Core and upgrades change it in place; do not create separate Mk I/Mk II/Mk III build pieces.
-- The Core's named clone currently uses the cache-verified `piece_chest_wood` runtime shell. Retain and configure its inherited `Container`; do not create a second storage authority. Before wiring tier expansion, verify `Container.Awake`/`Load` ordering and ensure the saved tier is applied before inventory contents are restored.
+- The Core's named clone currently uses the cache-verified `piece_chest_wood` runtime shell. Retain and configure its inherited `Container`; do not create a second storage authority. Set its base dimensions before runtime `Awake`, then apply its ZDO-saved tier before native `Container.Load` restores items.
+- Suppress the inherited chest UI only for the tagged RuneStorage Core. Harmony patches for `Container` must leave every non-RuneStorage container untouched.
 - One terminal uses exactly one eligible nearby core in the MVP. If multiple cores are in range, refuse ambiguous access instead of choosing silently.
 - Validate terminal distance, core distance, player access, core state, capacity, and inventory state on the authoritative side immediately before mutation.
 - Never trust client-supplied item names, counts, quality, durability, variant, crafter, or custom data as proof of ownership.
@@ -153,3 +155,15 @@ Deploy the plugin to its `BepInEx\plugins` directory. Do not create a backup cop
 - Do not use destructive repository commands such as `git reset --hard` or `git checkout --` unless explicitly requested.
 - Do not push or commit to a remote repository unless explicitly requested.
 - Do not mark a plan checkbox complete merely because source code exists; require the evidence described by the checkbox.
+
+<!-- antislop:start -->
+## antislop
+
+For UI work, read the Antislop core and the relevant UI and human-accessibility skills:
+
+- Core: `C:\Users\magni\.agents\skills\antislop\SKILL.md`
+- UI / visual: `C:\Users\magni\.agents\skills\antislop-ui\SKILL.md`
+- People / accessibility: `C:\Users\magni\.agents\skills\antislop-human\SKILL.md`
+
+Follow the core's mode and Delivery Gate requirements. Treat RuneStorage's existing UI rule above as the project's visual direction; keep screens in Valheim's native visual language and use Jötunn's GUI lifecycle.
+<!-- antislop:end -->
