@@ -1,8 +1,8 @@
 # RuneStorage - Development Plan
 
-> **Status:** In progress. The previous Unity terminal visual, Jotunn registration, placement ghost, and placed transform were verified as of 2026-10-18. On 2026-10-19, the replacement `Terminal2_Visual` prefab, 256x256 icon, and `runestorage_terminal` AssetBundle were rebuilt. The user reported that the new terminal ghost was offset although the placed visual aligned. The visual is now centered against the build origin during piece setup, before Jötunn registers it, so the preview does not depend on the runtime anchor executing. Release build and capacity tests pass, and the updated DLL is deployed to `VHouseholds-Admin`; the user confirmed the revised ghost and placed appearance look correct in-game on 2026-10-19. The Core visual prefab, 256x256 icon, AssetBundle, Jötunn registration, Gale deployment, ghost, and placed transform are verified as of 2026-10-18. The Core retains its native `Container`, configures Tier I as 16x16, applies the saved tier before native inventory loading, and blocks the Core's inherited chest UI. The terminal has Stored and Deposit tabs, per-item Take/Deposit 1/5/X actions, exact-group Deposit All, deposit-everything, searchable metadata-safe aggregation, stored-item sorting by name or amount in either direction, and faster scrolling. The user confirmed the UI and normal deposits/withdrawals work well, and reported the stored items remained after a restart. Terminal/Core Hammer recipes are configured at the locked costs; in-game recipe visibility remains to be verified. Release build and capacity tests pass; broader boundary, lifecycle, and multiplayer tests remain open.
+> **Status:** In progress. The previous Unity terminal visual, Jotunn registration, placement ghost, and placed transform were verified as of 2026-10-18. On 2026-10-19, the replacement `Terminal2_Visual` prefab, 256x256 icon, and `runestorage_terminal` AssetBundle were rebuilt. The user reported that the new terminal ghost was offset although the placed visual aligned. The visual is now centered against the build origin during piece setup, before Jötunn registers it, so the preview does not depend on the runtime anchor executing. Release build and capacity tests pass, and the updated DLL is deployed to `VHouseholds-Admin`; the user confirmed the revised ghost and placed appearance look correct in-game on 2026-10-19. The Core visual prefab, 256x256 icon, AssetBundle, Jötunn registration, Gale deployment, ghost, and placed transform are verified as of 2026-10-18. The Core retains its native `Container`, configures Tier I as 16x16, applies the saved tier before native inventory loading, and blocks the Core's inherited chest UI. The terminal has Stored and Deposit tabs, per-item Take/Deposit 1/5/X actions, exact-group Deposit All, deposit-everything, searchable metadata-safe aggregation, stored-item sorting by name or amount in either direction, and faster scrolling. The user confirmed the UI and normal deposits/withdrawals work well, and reported the stored items remained after a restart. Terminal/Core Hammer recipes are configured at the locked costs; in-game recipe visibility remains to be verified. **Clarified product goal (2026-10-19):** crafting from Core-held items is a core feature, through separate tabs for nearby crafting-station types (such as Workbench and Forge) that honor each station's effective upgrade level. This is planned but not implemented or runtime-verified. Release build and capacity tests pass; broader boundary, lifecycle, crafting, and multiplayer tests remain open.
 >
-> **Purpose:** Add a Valheim digital-storage system with a buildable runestone terminal and a nearby storage core whose native inventory stores large quantities of items and is presented through a searchable, sortable aggregate view.
+> **Purpose:** Add a Valheim digital-storage system where a buildable runestone terminal presents the nearby Core's native inventory and crafts from its stored ingredients using recipes unlocked by nearby, correctly upgraded crafting stations.
 >
 > **Authority:** This is the canonical implementation plan for the RuneStorage plugin. It owns the RuneStorage pieces, Core inventory and tier capacity, terminal interaction, transactions, packaging, and test gates.
 >
@@ -11,17 +11,20 @@
 
 ## 0. Outcome
 
-The player places a RuneStorage Terminal and one RuneStorage Core within range. The Core can be upgraded in place to increase its slot capacity. Interacting with the terminal opens a searchable aggregate view backed by the Core's native Valheim `Container` inventory. The player can deposit items, search and sort displayed item totals, withdraw exact quantities, and leave the world without losing or duplicating items.
+The player places a RuneStorage Terminal and one RuneStorage Core within range. The Core can be upgraded in place to increase its slot capacity. Interacting with the terminal opens searchable storage and crafting views backed by the Core's native Valheim `Container` inventory. The player can deposit items, search and sort stored totals, withdraw exact quantities, and craft recipes using ingredients held in the Core when the required nearby crafting station is available.
+
+**Crafting scope lock (2026-10-19):** The first implementation crafts one normal recipe per click from Core ingredients. Output goes to the player's inventory by default, with a terminal toggle to send it to the Core. A typed `Craft X` amount and sequential batch queue are deferred until the one-craft path works and is verified in-game.
 
 The intended happy path is:
 
 ```text
-Build terminal + core -> core is detected nearby -> open terminal -> deposit items
--> terminal aggregates matching inventory stacks -> search/select an item -> withdraw an amount
--> save and reload -> the same items remain available exactly once
+Build terminal + core -> core is detected nearby -> deposit items -> terminal aggregates matching stacks
+-> open terminal -> search/select an item -> withdraw an amount
+-> approach a required crafting station -> open the terminal's crafting view -> craft using Core ingredients
+-> save and reload -> remaining and crafted items persist exactly once
 ```
 
-The MVP is complete only when the path works with a mass-storage capacity, the terminal refuses to operate without a valid core, and the transaction tests show no duplication or silent item loss.
+The MVP is complete only when storage and Core-backed crafting work with the supported capacity, the terminal refuses invalid Core/station states, and transaction tests show no duplication or silent item loss.
 
 ## 1. Locked decisions
 
@@ -47,9 +50,15 @@ These decisions define the MVP. They may be revisited only if implementation evi
 - Proposed later capacities double the slot count: Tier II has 512 slots and Tier III has 1,024 slots. Treat these as design targets until tier resizing, inventory loading, and compatibility are verified in-game.
 - The terminal displays one aggregate row for compatible stored stacks, with the sum of their quantities. Items with different prefab identity or item-relevant metadata remain separate rows. Aggregation is presentation only; actual `ItemData` remains in the Core's `Container` inventory.
 - The MVP stores items in the Core's native inventory. It does not spawn a hidden pile of world containers and does not use the terminal inventory as a second storage authority.
-- The MVP includes deposit, withdrawal, search, sorting, slot-capacity feedback, native save/reload persistence, and multiplayer-safe request validation.
+- Core-backed crafting is a required RuneStorage feature: the terminal uses ingredients held in the Core's native `Container` inventory. It must not create a second item store or recipe-ingredient ledger.
+- For the first crafting slice, the Core is the only ingredient source; carried player items do not supplement it.
+- The terminal has a separate crafting tab for each supported station type (for example, Workbench and Forge). Each tab groups the player's unlocked normal-craft recipes by their required station. A craft action is enabled only when a matching station instance is within Valheim's native use distance and meets the recipe's required level.
+- Crafting eligibility uses `CraftingStation.InUseDistance(player)` and that same station instance's `GetLevel(true)`, compared with `Recipe.GetRequiredStationLevel(1)`. `GetLevel(true)` refreshes extensions for that station instance. Never combine upgrade pieces across different station instances.
+- Each click initially crafts exactly one recipe. Output goes to the player's inventory by default; a visible UI toggle routes output to the connected Core. If the selected destination cannot accept the full output, reject the craft before consuming ingredients.
+- The first slice covers registered, unlocked normal crafting recipes. Repairs and upgrades are excluded. A typed `Craft X` queue is deferred until one-at-a-time crafting is implemented and runtime-verified; do not add its field or imply batch support in the first slice.
+- The MVP includes deposit, withdrawal, Core-backed crafting, search, sorting, slot-capacity feedback, native save/reload persistence, and server-authoritative request validation.
 - The terminal UI will use Jotunn's `GUIManager` and Valheim-style UI helpers/anchors rather than requiring a separate player-facing UI mod. The old local mission-board panel is a layout reference only, not a RuneStorage dependency.
-- Crafting from the network is explicitly deferred until the basic storage transaction loop is stable. Nearby workbench and forge discovery belongs to the post-MVP crafting phase.
+- Core-backed crafting is the next planned feature after the current storage interaction. Multi-Core crafting networks remain out of scope while the MVP supports one unambiguous Core per terminal.
 - All prefab-based pieces must use Jotunn's registered named-prefab clone path. The implementation must verify the base prefab through `PrefabManager.Cache` before registration and must not guess a name such as `piece_wood`.
 - The plugin must declare a Jotunn dependency and register one-shot prefab content from `PrefabManager.OnVanillaPrefabsAvailable`, unsubscribing the callback after registration.
 
@@ -78,7 +87,6 @@ These capacities correspond to a 16-slot inventory width and heights of 16, 32, 
 
 ### Explicitly out of scope for the MVP
 
-- Crafting directly from RuneStorage.
 - Automatic pulling from nearby chests, carts, player tombstones, or other inventories.
 - Multiple cores forming one shared network.
 - Wireless or world-wide terminal access.
@@ -128,6 +136,16 @@ These capacities correspond to a 16-slot inventory width and heights of 16, 32, 
 4. The UI refreshes from both inventories and reports the committed result.
 5. If the inventory cannot accept the full request, the operation is rejected before mutation or is reduced only when the player explicitly chose an available-space-limited action.
 
+### Craft from Core storage
+
+1. The player opens the terminal's **Craft** view while an appropriate vanilla crafting station is nearby.
+2. The Craft view has a separate tab for each supported station type, such as **Workbench** or **Forge**. Each tab shows its station availability and effective upgrade level.
+3. The terminal offers recipes for that tab only when a real nearby station of that type satisfies the recipe's station level and other Valheim requirements. Its level includes valid upgrades/extensions as calculated by the game; station eligibility is not inferred from the Core's storage radius.
+4. The UI shows recipe requirements and available quantities resolved from the Core's current native inventory. During the first crafting slice, the Core is the only ingredient source; carried player items do not supplement it.
+5. When the player requests a craft, the authoritative side revalidates player access, terminal/Core state, the selected station instance and its effective level, recipe validity, and current Core ingredient counts. It serializes the craft with other mutations of that Core.
+6. The system validates the selected output destination before consuming ingredients. By default this is the player's inventory; a visible toggle routes output to the Core. If the destination cannot accept the full output, reject the craft before mutation. Failure must not silently consume ingredients or duplicate output.
+7. The terminal refreshes recipe availability and stored totals from the live Core inventory and reports the result.
+
 ### Status messages
 
 The MVP needs clear messages for at least:
@@ -143,7 +161,7 @@ The MVP needs clear messages for at least:
 
 ## 4. Architecture and ownership
 
-The repository is currently empty. The following names and paths are proposed implementation boundaries, not existing files.
+The existing implementation is under `src/RuneStorage/`. The following names and paths are proposed boundaries for extending or consolidating it; not every listed class/file currently exists.
 
 ### Proposed source layout
 
@@ -164,6 +182,8 @@ RuneStorage/
         InventoryAggregator.cs
         CoreTierCapacity.cs
         StorageTransaction.cs
+        CoreCraftingTransaction.cs  # proposed; Core-backed recipe transactions
+        NearbyStationResolver.cs    # proposed; verified station/level eligibility
       Terminal/
         RuneStorageTerminal.cs
         RuneStorageTerminalUi.cs
@@ -191,7 +211,9 @@ RuneStorage/
 | `CoreInventory` | Native inventory access, slot-capacity enforcement, item transfer | Search/filter presentation state |
 | `InventoryAggregator` | Grouping compatible inventory stacks, summed totals, lookup, sorting | Mutating item ownership or storing a second copy |
 | `CoreTierCapacity` | Tier-to-width/height mapping and slot-count math | Runtime tier persistence or upgrades |
-| `StorageTransaction` | Deposit/withdraw validation, locks, item transfer, recovery checks | UI commands that bypass server validation |
+| `RuneStorageTransactions` | Current deposit/withdraw path; future shared Core mutation coordination | UI commands that bypass server validation |
+| `CoreCraftingTransaction` (proposed) | Recipe validation, Core ingredient reservation/consumption, output completion, and failure handling | A second ingredient store or trusting UI counts |
+| `NearbyStationResolver` (proposed) | Resolving nearby station type/level and eligibility using verified Valheim APIs | Inventing a station radius that bypasses game rules |
 | `RuneStorageTerminal` | Interaction point, nearby-core resolution, UI requests | Permanent item ownership |
 | `RuneStorageTerminalUi` | Search, sorting, aggregate display, selection, user feedback | Trusting client-supplied quantities or prefab names |
 | `AccessValidator` | Player, distance, build-access, ward, and server-authority checks | Granting access when validation is unavailable |
@@ -209,7 +231,7 @@ The existing local file below contains useful patterns for panels, buttons, scro
 C:\Users\magni\Documents\BotsnCoding\Valheim\Households-REPO\OLDmoddedcatoheim\src\MissionSystemMod\MissionBoardPanel.cs
 ```
 
-The first RuneStorage screen is implemented as a single panel with:
+The current RuneStorage screen is implemented as a single panel with:
 
 - a title and core status line;
 - occupied slots, active tier capacity, and total item quantity;
@@ -219,7 +241,9 @@ The first RuneStorage screen is implemented as a single panel with:
 - `Deposit All` and close buttons;
 - a visible error/status area for missing cores, full capacity, stale selections, and recovery mode.
 
-The UI is a searchable, aggregated view and request builder. It never becomes a second inventory or trusts its displayed counts as transaction authority. The Core's normal chest interaction is suppressed. Source-level transfers re-resolve the Core and access state, require the local process to own the Core's ZNetView, and move the original `ItemData` between native inventories. A client that does not own the Core can inspect its local snapshot but cannot transfer. A network request path for remote peers is still required before multiplayer transfers can be enabled.
+The planned **Craft** view will use the same GUI lifecycle and Valheim visual language. It will have a station-specific tab for each supported station type, report that station's availability/effective upgrade level, and show only its eligible recipes. Ingredient availability comes from the Core. Recipe-list scale, filters, and disabled-tab appearance remain design decisions; the output destination defaults to player inventory and can be toggled to the Core.
+
+The UI is a searchable, aggregated view and request builder. It never becomes a second inventory or trusts its displayed counts as transaction authority. The Core's normal chest interaction is suppressed. Current source-level deposits/withdrawals re-resolve the Core and access state, require the local process to own the Core's ZNetView, and move the original `ItemData` between native inventories. A client that does not own the Core cannot transfer. A network request path for remote peers is still required before multiplayer transfers or Core-backed crafting can be enabled for remote clients.
 
 ### Prefab and asset pipeline
 
@@ -333,7 +357,7 @@ Tier I's 256 slots are the starting target. Tier II and Tier III remain proposal
 
 The terminal aggregates the current Core inventory for display. It must compare exact prefab identity and all fields that affect stack compatibility or item identity (including quality, variant, durability, crafter, and custom data as applicable). Stack count and inventory grid position are not identity. Unlike items must never be merged in the view. Aggregation is read-only and does not create substitute `ItemData` records.
 
-The project's local Valheim assembly was inspected. `Container.Awake()` creates an `Inventory`; `Container.Save()` serializes it through `Inventory.Save(ZPackage)` into the Core's ZDO, and `Container.Load()` restores it through `Inventory.Load(ZPackage)`. `Inventory.SetHeight(Int32)` exists and changes the inventory's logical height. RuneStorage should rely on this native item persistence rather than duplicate Valheim's item serializer. Persist the Core tier separately in its ZDO, then apply the tier dimensions before Container loading restores inventory positions. Confirm the actual component `Awake`/`Load` order in-game or by local assembly inspection before wiring this sequence; the buildable prefab currently destroys the inherited `Container`, which must be revised before the Core can store anything.
+The project's local Valheim assembly was inspected. `Container.Awake()` creates an `Inventory`; `Container.Save()` serializes it through `Inventory.Save(ZPackage)` into the Core's ZDO, and `Container.Load()` restores it through `Inventory.Load(ZPackage)`. `Inventory.SetHeight(Int32)` exists and changes the inventory's logical height. RuneStorage relies on this native item persistence rather than a duplicate item serializer. The current Core implementation retains its inherited `Container`, stores its tier separately in the ZDO, and applies tier dimensions before native inventory loading. The user reported that stored items survived a game restart; wider capacity, tier-transition, and multiplayer persistence checks remain open.
 
 The standalone capacity mapping in `src/RuneStorage/Core/CoreTierCapacity.cs` is covered by isolated tests. It does not resize a live `Inventory`, attach a `Container` to the Core, aggregate items, or verify save/load.
 
@@ -376,6 +400,12 @@ Every deposit and withdrawal is a server-authoritative transfer between the play
 8. Release the lock in a `finally`-equivalent cleanup path.
 
 The implementation must never accept a client-supplied prefab name, item count, quality, or metadata as proof that the player owns an item. The server reads the actual inventory and matches the requested operation to it.
+
+### Core-backed crafting transaction
+
+Crafting is another mutation of the Core's authoritative native inventory, not a separate storage backend. A craft request must resolve a currently registered recipe and a nearby station satisfying that recipe's requirements, then re-read the Core inventory and reserve the exact ingredient quantities under the same per-Core mutation lock used by deposits and withdrawals. The UI's ingredient counts are a preview only. The implementation must preflight the selected output destination before consuming ingredients: player inventory by default, or Core when the UI toggle is selected. If the destination cannot accept the full output, reject before mutation. No craft may be reported as complete until ingredients and output have reached a consistent result. The local Valheim recipe/station APIs have been verified for the initial implementation; runtime behavior and transaction edge cases still require testing.
+
+Station tabs are keyed by actual crafting-station type, not display labels guessed from recipe names. For each candidate station, use the game's effective level calculation, including its valid upgrade/extension pieces. When multiple stations are nearby, validate each recipe against one real eligible station instance; do not combine extension levels across separate stations. Displayed station state is a preview and must be revalidated at craft time.
 
 ### Interrupted operations
 
@@ -482,6 +512,18 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 | No inventory space | Withdrawal is rejected or reduced only by an explicit user action | Inventory-full test |
 | Save and reload | Stored items remain available with the same totals and metadata | World reload test |
 | Plugin restart | Core's native Container inventory loads without resetting data | Restart log and before/after inventory comparison |
+| Missing/ineligible station | Craft view refuses recipes that require an unavailable station or station level | In-game test with no station, wrong station, and insufficient station level |
+| Station-specific tabs | Workbench recipes appear only in the Workbench tab, Forge recipes only in the Forge tab, and so on for supported types | Compare each tab with the registered recipe station type |
+| Upgraded station level | Recipes requiring the higher level appear when valid upgrades/extensions are present and disappear when that level is no longer valid | In-game test before/after adding or removing station upgrades and confirming the displayed effective level |
+| Multiple same-type stations | Recipe eligibility is satisfied by one actual station instance; separate stations' upgrade pieces are never combined | Place stations with different levels and verify recipe visibility and craft-time validation |
+| Core-backed recipe preview | Recipe availability and ingredient counts match the live Core inventory | Compare terminal preview with Core contents and registered recipe |
+| One craft per click | One click consumes one recipe's Core ingredients and produces that recipe's output once | Before/after Core and output-inventory comparison |
+| Output destination default | A newly opened terminal routes crafted output to the player's inventory unless changed | Craft once and verify the player inventory changes while the Core does not receive output |
+| Output destination toggle | Switching the UI toggle routes the next crafted output into the connected Core | Craft once in each destination mode and compare both inventories |
+| Insufficient Core ingredients | Craft is rejected without changing the Core or output inventory | Controlled missing-ingredient test |
+| Craft output has no room | Craft does not consume ingredients or duplicate/drop output | Full destination-inventory test |
+| Concurrent craft and storage transfer | Operations serialize on the Core; each committed result occurs once | Host/client concurrency test and before/after inventories |
+| Save/reload after crafting | Ingredients remain consumed and crafted output persists exactly once | World reload and inventory comparison |
 | Interrupted deposit | Recovery does not duplicate or silently lose the operation | Forced disconnect/save-boundary test |
 | Interrupted withdrawal | Reserved items are restored or delivered exactly once | Forced disconnect/save-boundary test |
 | Invalid saved tier | Core blocks writes and preserves the existing native inventory | Controlled tier-state test and log |
@@ -576,16 +618,27 @@ The current source includes owner-local transfer methods as a development slice.
 - [ ] Review logs for sensitive data, stale references, duplicate registrations, and exception paths.
 - [ ] **Verify:** Multiplayer and lifecycle tests show one authoritative native inventory result per committed transfer and no partial transfer is hidden.
 
-### Phase 6 - Upgrade path and post-MVP systems
+### Phase 6 - Core-backed crafting and capacity upgrades
+
+#### Core-backed crafting - next feature
+
+- [x] Verify the installed Valheim APIs from `assembly_valheim.dll`: recipes are registered in `ObjectDB.m_recipes`; `Player.IsRecipeKnown` and `Recipe.GetRequiredStation(1)` identify unlocked station recipes; `CraftingStation.InUseDistance` applies the native player-to-station range; `GetLevel(true)` refreshes that instance's extensions before returning its effective level; and `GetRequiredStationLevel(1)` supplies the recipe threshold. `InventoryGui.DoCrafting` consumes from the player's inventory, so RuneStorage must consume from the Core directly.
+- [x] Lock the initial behavior: Core-only ingredients, one normal craft per click, output to player by default, a UI toggle for Core output, and no repair/upgrade actions in this slice.
+- [ ] Add station-specific **Workbench**, **Forge**, and other supported station tabs to the terminal using the existing Jotunn GUI lifecycle; show station availability/effective level and the player's unlocked recipes for that station.
+- [ ] Implement server-authoritative recipe preview and craft requests that revalidate the selected live station instance and effective level, recipe, Core, access, and ingredient inventory.
+- [ ] Consume ingredients from the Core's native `Container` inventory under the same per-Core mutation lock as deposit/withdraw; do not create an ingredient ledger.
+- [ ] Validate the selected output capacity before ingredient mutation. Default output to the player inventory, add the Core-output toggle, and implement non-destructive failure handling for unavailable stations, stale recipe state, insufficient ingredients, no output space, and interrupted requests.
+- [ ] **Verify:** One click crafts exactly one representative recipe from Core-held ingredients at the correct nearby station; confirm wrong/missing/under-level stations and missing ingredients change nothing, both output destinations work, and successful outputs and remaining Core items survive save/reload exactly once.
+- [ ] After the one-at-a-time craft path passes runtime verification, add a typed `Craft X` amount and sequential queue. Each iteration must be a separately revalidated single-craft transaction, stop on the first failure, and report the completed count. This is deferred and must not be implemented as part of the initial crafting slice.
+
+#### Capacity upgrades - after the first crafting slice
 
 - [ ] Add an Upgrade tab showing current/next tier and capacity, required versus available materials, and an in-place upgrade action.
 - [ ] Add an in-place upgrade path that persists the Core's capacity tier without changing its build-piece identity.
 - [ ] Define and implement the Tier II upgrade item, recipe, validation, and visual/status feedback.
 - [ ] Add Tier III only after Tier II persistence and migration tests pass.
 - [ ] Decide whether multiple cores should merge into a network or remain separate storage systems.
-- [ ] Design the crafting integration around verified nearby workbench/forge requirements.
-- [ ] Add craft-from-storage preview, ingredient reservation, output delivery, and failure recovery as a separate transaction family.
-- [ ] **Verify:** Upgrading a populated Core in place preserves every existing item and slot position, increases capacity without changing item or build-piece identity, and survives save/reload before crafting work begins.
+- [ ] **Verify:** Upgrading a populated Core in place preserves every existing item and slot position, increases capacity without changing item or build-piece identity, and survives save/reload.
 
 ### Phase 7 - Release packaging and deployment
 
@@ -607,6 +660,10 @@ The current source includes owner-local transfer methods as a development slice.
 - Exact terminal and core base prefab names after runtime cache inspection.
 - Whether the terminal uses a custom AssetBundle visual or an approved vanilla runestone visual with custom children.
 - Exact Tier II and Tier III upgrade recipes, stations, and resource costs.
+- Whether future versions should allow player-carried ingredients to supplement Core ingredients; the first slice uses Core ingredients only.
+- Whether future versions should include repair or upgrade actions; the first slice handles normal recipes only.
+- The final set of supported station types and mod-added recipe edge cases confirmed during runtime tests; the UI derives station tabs from registered recipes.
+- Batch `Craft X` quantity and queue behavior, deferred until one-at-a-time crafting is runtime-verified.
 - Whether the first public MVP permits non-stackable equipment or initially limits storage to safely reconstructable stackable items.
 - Whether native Container persistence or inventory UI behavior imposes a practical slot ceiling below the proposed tiers.
 - The precise recovery behavior available when a player disconnects between a world-object save and a character-inventory save.
