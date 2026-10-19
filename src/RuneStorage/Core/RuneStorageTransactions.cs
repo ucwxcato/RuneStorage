@@ -9,6 +9,25 @@ namespace RuneStorage
     {
         private static readonly HashSet<int> ActiveCoreOperations = new HashSet<int>();
 
+        internal static bool TryBeginCoreOperation(RuneStorageCoreMarker marker, out int operationId)
+        {
+            operationId = marker != null ? marker.GetInstanceID() : 0;
+            if (marker == null) return false;
+
+            lock (ActiveCoreOperations)
+            {
+                return ActiveCoreOperations.Add(operationId);
+            }
+        }
+
+        internal static void EndCoreOperation(int operationId)
+        {
+            lock (ActiveCoreOperations)
+            {
+                ActiveCoreOperations.Remove(operationId);
+            }
+        }
+
         internal static string DepositAll(Player player, RuneStorageTerminalMarker terminal)
         {
             if (!RuneStorageCoreAccess.TryResolve(player, terminal, out RuneStorageCoreMarker marker, out Container core, out string reason))
@@ -28,8 +47,7 @@ namespace RuneStorage
                 return "A player or Core inventory is unavailable. No items were moved.";
             }
 
-            int operationId = marker.GetInstanceID();
-            if (!ActiveCoreOperations.Add(operationId))
+            if (!TryBeginCoreOperation(marker, out int operationId))
             {
                 return "The Core is already handling a transfer. Try again in a moment.";
             }
@@ -78,7 +96,7 @@ namespace RuneStorage
             }
             finally
             {
-                ActiveCoreOperations.Remove(operationId);
+                EndCoreOperation(operationId);
             }
         }
 
@@ -111,8 +129,7 @@ namespace RuneStorage
                 return "A player or Core inventory is unavailable. No items were moved.";
             }
 
-            int operationId = marker.GetInstanceID();
-            if (!ActiveCoreOperations.Add(operationId))
+            if (!TryBeginCoreOperation(marker, out int operationId))
             {
                 return "The Core is already handling a transfer. Try again in a moment.";
             }
@@ -172,7 +189,7 @@ namespace RuneStorage
             }
             finally
             {
-                ActiveCoreOperations.Remove(operationId);
+                EndCoreOperation(operationId);
             }
         }
 
@@ -204,8 +221,7 @@ namespace RuneStorage
                 return "A player or Core inventory is unavailable. No items were moved.";
             }
 
-            int operationId = marker.GetInstanceID();
-            if (!ActiveCoreOperations.Add(operationId))
+            if (!TryBeginCoreOperation(marker, out int operationId))
             {
                 return "The Core is already handling a transfer. Try again in a moment.";
             }
@@ -252,7 +268,7 @@ namespace RuneStorage
             }
             finally
             {
-                ActiveCoreOperations.Remove(operationId);
+                EndCoreOperation(operationId);
             }
         }
 

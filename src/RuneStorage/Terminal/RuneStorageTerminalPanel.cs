@@ -8,7 +8,7 @@ using UnityEngine.UI;
 
 namespace RuneStorage
 {
-    internal static class RuneStorageTerminalPanel
+    internal static partial class RuneStorageTerminalPanel
     {
         private enum StoredSortField
         {
@@ -36,6 +36,7 @@ namespace RuneStorage
         private static Text _helpText;
         private static Button _storedTabButton;
         private static Button _depositTabButton;
+        private static Button _craftTabButton;
         private static Button _depositEverythingButton;
         private static Text _sortLabel;
         private static Button _sortByNameButton;
@@ -47,6 +48,7 @@ namespace RuneStorage
         private static RuneStorageTerminalMarker _terminal;
         private static bool _isOpen;
         private static bool _depositTabActive;
+        private static bool _craftTabActive;
         private static bool _restoreCursor;
         private static CursorLockMode _previousCursorLock;
         private static bool _previousCursorVisible;
@@ -69,6 +71,7 @@ namespace RuneStorage
             _helpText = null;
             _storedTabButton = null;
             _depositTabButton = null;
+            _craftTabButton = null;
             _depositEverythingButton = null;
             _sortLabel = null;
             _sortByNameButton = null;
@@ -77,6 +80,8 @@ namespace RuneStorage
             _storedSortField = StoredSortField.Name;
             _sortAscending = true;
             _depositTabActive = false;
+            _craftTabActive = false;
+            ResetCraftingPanelState();
 
             GUIManager gui = GUIManager.Instance;
             if (gui == null || GUIManager.CustomGUIFront == null) return;
@@ -179,6 +184,7 @@ namespace RuneStorage
 
             _storedTabButton = CreateTabButton(gui, "Stored", new Vector2(34f, -159f), () => SelectTab(false));
             _depositTabButton = CreateTabButton(gui, "Deposit", new Vector2(150f, -159f), () => SelectTab(true));
+            _craftTabButton = CreateTabButton(gui, "Craft", new Vector2(266f, -159f), SelectCraftTab);
 
             GameObject searchObject = gui.CreateInputField(
                 _panel.transform,
@@ -274,6 +280,7 @@ namespace RuneStorage
                 ToggleSortDirection);
             if (_sortLabel != null) _sortLabel.gameObject.SetActive(false);
             SetSortControlsVisible(false);
+            BuildCraftControls(gui);
 
             _scrollView = gui.CreateScrollView(
                 _panel.transform,
@@ -460,7 +467,7 @@ namespace RuneStorage
                 _searchInput.Select();
                 _searchInput.ActivateInputField();
             }
-            SetStatus("Reading the Core inventory...");
+            SetStatus(_craftTabActive ? "Reading unlocked recipes and nearby stations..." : "Reading the Core inventory...");
             RefreshRows();
         }
 
@@ -542,16 +549,26 @@ namespace RuneStorage
 
         private static void SelectTab(bool deposit)
         {
+            bool wasCrafting = _craftTabActive;
             _depositTabActive = deposit;
+            _craftTabActive = false;
             SetTabSelected(_storedTabButton, !deposit);
             SetTabSelected(_depositTabButton, deposit);
+            SetTabSelected(_craftTabButton, false);
 
             if (_depositEverythingButton != null)
             {
                 _depositEverythingButton.gameObject.SetActive(deposit);
             }
-            SetSortControlsVisible(!deposit);
+            SetSortControlsVisible(!deposit && !_craftTabActive);
+            SetCraftControlsVisible(false);
             UpdateSortControls();
+
+            if (_amountInput != null) _amountInput.gameObject.SetActive(true);
+            if (_amountLabel != null) _amountLabel.gameObject.SetActive(true);
+            SetItemListLayout(false);
+            SetSearchLayout(false);
+            if (wasCrafting && _searchInput != null) _searchInput.text = string.Empty;
 
             if (_amountLabel != null) _amountLabel.text = deposit ? "Deposit X" : "Withdraw X";
             if (_searchInput != null && _searchInput.placeholder is Text placeholder)
@@ -567,6 +584,37 @@ namespace RuneStorage
             }
 
             SetStatus("Reading the Core inventory...");
+            RefreshRows();
+        }
+
+        private static void SelectCraftTab()
+        {
+            _depositTabActive = false;
+            _craftTabActive = true;
+            SetTabSelected(_storedTabButton, false);
+            SetTabSelected(_depositTabButton, false);
+            SetTabSelected(_craftTabButton, true);
+
+            if (_depositEverythingButton != null) _depositEverythingButton.gameObject.SetActive(false);
+            SetSortControlsVisible(false);
+            SetCraftControlsVisible(true);
+            if (_amountInput != null) _amountInput.gameObject.SetActive(false);
+            if (_amountLabel != null) _amountLabel.gameObject.SetActive(false);
+            SetItemListLayout(true);
+            SetSearchLayout(true);
+            if (_searchInput != null) _searchInput.text = string.Empty;
+
+            if (_searchInput != null && _searchInput.placeholder is Text placeholder)
+            {
+                placeholder.text = "Search recipes or ingredients";
+            }
+
+            if (_helpText != null)
+            {
+                _helpText.text = "Each click crafts one recipe using Core ingredients. A nearby station must meet the recipe's required level.";
+            }
+
+            SetStatus("Reading unlocked recipes and nearby stations...");
             RefreshRows();
         }
 
@@ -683,6 +731,11 @@ namespace RuneStorage
         private static void RefreshRows()
         {
             if (_panel == null || _content == null) return;
+            if (_craftTabActive)
+            {
+                RefreshCraftRows();
+                return;
+            }
 
             if (!RuneStorageCoreAccess.TryResolve(_player, _terminal, out _, out Container container, out string reason))
             {
