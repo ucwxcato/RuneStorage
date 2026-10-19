@@ -1,6 +1,6 @@
 # RuneStorage - Development Plan
 
-> **Status:** In progress. The previous Unity terminal visual, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, placement ghost, and placed transform were verified as of 2026-10-18. The replacement `Terminal2_Visual` prefab is wired into registration, and the icon/bundle rebuild is available from Unity; rebuilt bundle, deployment, and in-game appearance/scale are pending. The Core visual prefab, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, ghost, and placed transform are verified as of 2026-10-18. The Core retains its native `Container`, configures Tier I as 16x16, applies the saved tier before native inventory loading, and blocks the Core's inherited chest UI. The terminal has Stored and Deposit tabs, per-item Take/Deposit 1/5/X actions, exact-group Deposit All, deposit-everything, searchable metadata-safe aggregation, stored-item sorting by name or amount in either direction, and faster scrolling. The user confirmed the UI and normal deposits/withdrawals work well, and reported the stored items remained after a restart. Terminal/Core Hammer recipes are configured at the locked costs; in-game recipe visibility remains to be verified. Release build and capacity tests pass; broader boundary, lifecycle, and multiplayer tests remain open.
+> **Status:** In progress. The previous Unity terminal visual, Jotunn registration, placement ghost, and placed transform were verified as of 2026-10-18. On 2026-10-19, the replacement `Terminal2_Visual` prefab, 256x256 icon, and `runestorage_terminal` AssetBundle were rebuilt; the matching Release DLL was deployed to `VHouseholds-Admin`. The new in-game appearance, authored `(4, 4, 4)` scale, and placement alignment still need runtime confirmation. The Core visual prefab, 256x256 icon, AssetBundle, Jotunn registration, Gale deployment, ghost, and placed transform are verified as of 2026-10-18. The Core retains its native `Container`, configures Tier I as 16x16, applies the saved tier before native inventory loading, and blocks the Core's inherited chest UI. The terminal has Stored and Deposit tabs, per-item Take/Deposit 1/5/X actions, exact-group Deposit All, deposit-everything, searchable metadata-safe aggregation, stored-item sorting by name or amount in either direction, and faster scrolling. The user confirmed the UI and normal deposits/withdrawals work well, and reported the stored items remained after a restart. Terminal/Core Hammer recipes are configured at the locked costs; in-game recipe visibility remains to be verified. Release build and capacity tests pass; broader boundary, lifecycle, and multiplayer tests remain open.
 >
 > **Purpose:** Add a Valheim digital-storage system with a buildable runestone terminal and a nearby storage core whose native inventory stores large quantities of items and is presented through a searchable, sortable aggregate view.
 >
@@ -277,7 +277,7 @@ The replacement prefab supplied in the Unity project is:
 Unity\RuneStorage-Valheim\Assets\RuneStorage\Terminal\Prefabs\Terminal2_Visual.prefab
 ```
 
-Its serialized root scale is `(4, 4, 4)`. Runtime attachment must preserve the prefab-authored scale and facing; `TerminalVisualAnchor` may recenter the model by changing position only. The RuneStorage terminal icon must be rendered from this prefab, and the `runestorage_terminal` AssetBundle must contain this prefab instead of the previous terminal visual. Bundle rebuild and in-game visual/scale confirmation remain pending.
+Its serialized root scale is `(4, 4, 4)`. Runtime attachment must preserve the prefab-authored scale and facing; `TerminalVisualAnchor` may recenter the model by changing position only. The RuneStorage terminal icon is rendered from this prefab, and the `runestorage_terminal` AssetBundle now contains this prefab instead of the previous terminal visual. The rebuilt Release DLL is deployed to `VHouseholds-Admin`; in-game visual, scale, and placement confirmation remain pending.
 
 ### Selected Core visual source
 
@@ -520,7 +520,8 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
  - [x] Register the terminal with `new CustomPiece(customName, verifiedBasePrefabName, pieceConfig)` using a verified base name.
 - [x] Register the Core with the same named-clone path and its unique piece, visual, icon, and bundle identifiers.
 - [x] Attach the terminal/Core visuals after cloning and before adding each piece to its Jotunn manager.
-- [ ] Rebuild the terminal icon and bundle from `Terminal2_Visual`, then verify the runtime preserves its `(4, 4, 4)` scale and placement alignment in-game.
+- [x] Rebuild the 256x256 terminal icon and `runestorage_terminal` bundle from `Terminal2_Visual`, build Release, and deploy the matching DLL to `VHouseholds-Admin` (2026-10-19).
+- [ ] Verify in-game that the runtime preserves the prefab's `(4, 4, 4)` scale, facing, and placement alignment.
 - [x] Do not attach a smoke or particle effect to the MVP terminal.
 - [x] Add distinct icons and configure the Hammer recipes after visual and piece identities stabilized; the Core requires a Forge.
 - [x] Add startup logs for plugin version, resolved base prefabs, piece names, and registration result; the 0.1.3 profile log confirms both bundles and pieces registered with `piece_chest_wood`.
