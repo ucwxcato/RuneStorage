@@ -7,11 +7,24 @@
 /Unity/RuneStorage-Valheim/[Ll]ogs/
 /Unity/RuneStorage-Valheim/[Uu]ser[Ss]ettings/
 
+# Unity generated data for the CatosCrystals project
+/Unity/CatosCrystals/[Ll]ibrary/
+/Unity/CatosCrystals/[Tt]emp/
+/Unity/CatosCrystals/[Oo]bj/
+/Unity/CatosCrystals/[Bb]uild/
+/Unity/CatosCrystals/[Bb]uilds/
+/Unity/CatosCrystals/[Ll]ogs/
+/Unity/CatosCrystals/[Uu]ser[Ss]ettings/
+
 # Unity-generated IDE files
 /Unity/RuneStorage-Valheim/*.csproj
 /Unity/RuneStorage-Valheim/*.sln
 /Unity/RuneStorage-Valheim/*.slnx
 /Unity/RuneStorage-Valheim/.vs/
+/Unity/CatosCrystals/*.csproj
+/Unity/CatosCrystals/*.sln
+/Unity/CatosCrystals/*.slnx
+/Unity/CatosCrystals/.vs/
 
 # Local build and deployment output
 /bin/
@@ -19,3 +32,4 @@
 /MODS/
 **/bin/
 **/obj/
+Unity/

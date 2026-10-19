@@ -14,6 +14,7 @@ namespace RuneStorage
         internal int NearbyLevel { get; set; }
         internal bool RequiresStation { get; set; }
         internal List<RuneStorageCraftingRecipe> Recipes { get; } = new List<RuneStorageCraftingRecipe>();
+        internal List<Recipe> SourceRecipes { get; } = new List<Recipe>();
     }
 
     internal sealed class RuneStorageCraftingIngredient
@@ -50,45 +51,96 @@ namespace RuneStorage
     {
         internal const string HandCraftingStationId = "RuneStorage_HandCrafting";
 
-        internal static List<RuneStorageCraftingStationGroup> GetStationGroups(
-            Player player,
-            Container core,
-            bool outputToCore)
+        internal static List<RuneStorageCraftingStationGroup> GetStationGroups(Player player)
         {
             var groups = new Dictionary<string, RuneStorageCraftingStationGroup>(StringComparer.Ordinal);
-            if (player == null || core == null || ObjectDB.instance == null || ObjectDB.instance.m_recipes == null)
+            if (player == null || ObjectDB.instance == null || ObjectDB.instance.m_recipes == null)
             {
                 return new List<RuneStorageCraftingStationGroup>();
             }
 
-            Inventory coreInventory = core.GetInventory();
-            if (coreInventory == null) return new List<RuneStorageCraftingStationGroup>();
+            var nearbyLevels = new Dictionary<string, int>(StringComparer.Ordinal);
+            List<CraftingStation> sceneFallback = null;
+            int GetNearbyLevel(CraftingStation station)
+            {
+                string identity = GetStationIdentity(station);
+                if (!nearbyLevels.TryGetValue(identity, out int level))
+                {
+                    level = FindBestNearbyLevel(player, station, ref sceneFallback);
+                    nearbyLevels.Add(identity, level);
+                }
+
+                return level;
+            }
 
             foreach (Recipe recipe in ObjectDB.instance.m_recipes)
             {
-                if (!IsKnownNormalRecipe(player, recipe)) continue;
+                if (!IsNormalRecipe(recipe)) continue;
+
+                CraftingStation requiredStation = recipe.GetRequiredStation(1);
+                if (requiredStation == null) continue;
+
+                string stationId = GetStationIdentity(requiredStation);
+                if (groups.ContainsKey(stationId)) continue;
+
+                int nearbyLevel = GetNearbyLevel(requiredStation);
+
+                groups.Add(stationId, new RuneStorageCraftingStationGroup
+                {
+                    Identity = stationId,
+                    DisplayName = GetStationDisplayName(requiredStation),
+                    RequiresStation = true,
+                    NearbyLevel = nearbyLevel
+                });
+            }
+
+            var availableRecipes = new List<Recipe>();
+            player.GetAvailableRecipes(ref availableRecipes);
+            foreach (Recipe recipe in availableRecipes)
+            {
+                if (!IsNormalRecipe(recipe)) continue;
 
                 CraftingStation requiredStation = recipe.GetRequiredStation(1);
                 string stationId = GetStationIdentity(requiredStation);
                 if (!groups.TryGetValue(stationId, out RuneStorageCraftingStationGroup group))
                 {
+                    int nearbyLevel = requiredStation == null ? 0 : GetNearbyLevel(requiredStation);
                     group = new RuneStorageCraftingStationGroup
                     {
                         Identity = stationId,
                         DisplayName = GetStationDisplayName(requiredStation),
                         RequiresStation = requiredStation != null,
-                        NearbyLevel = requiredStation == null ? 0 : FindBestNearbyLevel(player, requiredStation)
+                        NearbyLevel = nearbyLevel
                     };
                     groups.Add(stationId, group);
                 }
 
-                group.Recipes.Add(BuildRecipeView(player, coreInventory, recipe, group, outputToCore));
+                group.SourceRecipes.Add(recipe);
             }
 
             return groups.Values
                 .OrderBy(group => group.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(group => group.Identity, StringComparer.Ordinal)
                 .ToList();
+        }
+
+        internal static void BuildRecipeViews(
+            Player player,
+            Container core,
+            RuneStorageCraftingStationGroup group,
+            bool outputToCore)
+        {
+            if (player == null || core == null || group == null) return;
+
+            Inventory coreInventory = core.GetInventory();
+            if (coreInventory == null) return;
+
+            Dictionary<string, int> inventoryCounts = BuildInventoryCounts(coreInventory);
+            group.Recipes.Clear();
+            foreach (Recipe recipe in group.SourceRecipes)
+            {
+                group.Recipes.Add(BuildRecipeView(player, coreInventory, inventoryCounts, recipe, group, outputToCore));
+            }
         }
 
         internal static string Craft(
@@ -157,7 +209,7 @@ namespace RuneStorage
                     return "A player or Core inventory is unavailable. No ingredients were used.";
                 }
 
-                List<RuneStorageCraftingIngredient> ingredients = GetIngredients(recipe, coreInventory);
+                List<RuneStorageCraftingIngredient> ingredients = GetIngredients(recipe, BuildInventoryCounts(coreInventory));
                 if (!IsSupportedRecipe(recipe, ingredients, out string unsupportedReason))
                 {
                     return unsupportedReason;
@@ -251,19 +303,22 @@ namespace RuneStorage
                 return null;
             }
 
-            return ObjectDB.instance.m_recipes.FirstOrDefault(recipe =>
-                IsKnownNormalRecipe(player, recipe)
+            var availableRecipes = new List<Recipe>();
+            player.GetAvailableRecipes(ref availableRecipes);
+            return availableRecipes.FirstOrDefault(recipe =>
+                IsNormalRecipe(recipe)
                 && string.Equals(GetRecipeIdentity(recipe), recipeIdentity, StringComparison.Ordinal));
         }
 
         private static RuneStorageCraftingRecipe BuildRecipeView(
             Player player,
             Inventory coreInventory,
+            Dictionary<string, int> inventoryCounts,
             Recipe recipe,
             RuneStorageCraftingStationGroup stationGroup,
             bool outputToCore)
         {
-            List<RuneStorageCraftingIngredient> ingredients = GetIngredients(recipe, coreInventory);
+            List<RuneStorageCraftingIngredient> ingredients = GetIngredients(recipe, inventoryCounts);
             bool supported = IsSupportedRecipe(recipe, ingredients, out string unsupportedReason);
             int requiredLevel = stationGroup.RequiresStation ? recipe.GetRequiredStationLevel(1) : 0;
             bool stationAvailable = !stationGroup.RequiresStation || stationGroup.NearbyLevel >= requiredLevel;
@@ -316,18 +371,15 @@ namespace RuneStorage
             };
         }
 
-        private static bool IsKnownNormalRecipe(Player player, Recipe recipe)
+        private static bool IsNormalRecipe(Recipe recipe)
         {
-            if (player == null || recipe == null || !recipe.m_enabled || recipe.m_item == null
-                || recipe.m_item.m_itemData == null || recipe.m_item.m_itemData.m_shared == null)
-            {
-                return false;
-            }
-
-            if (recipe.m_noCraftOnlyUpgrade || recipe.m_repairStation != null) return false;
-            string sharedName = recipe.m_item.m_itemData.m_shared.m_name;
-            string prefabName = recipe.m_item.gameObject.name;
-            return player.IsRecipeKnown(sharedName) || player.IsRecipeKnown(prefabName);
+            return recipe != null
+                && recipe.m_enabled
+                && recipe.m_item != null
+                && recipe.m_item.m_itemData != null
+                && recipe.m_item.m_itemData.m_shared != null
+                && !recipe.m_noCraftOnlyUpgrade
+                && recipe.m_repairStation == null;
         }
 
         private static bool IsSupportedRecipe(
@@ -375,7 +427,29 @@ namespace RuneStorage
             return true;
         }
 
-        private static List<RuneStorageCraftingIngredient> GetIngredients(Recipe recipe, Inventory inventory)
+        private static Dictionary<string, int> BuildInventoryCounts(Inventory inventory)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (inventory == null) return counts;
+
+            foreach (ItemDrop.ItemData item in inventory.GetAllItems())
+            {
+                if (item == null || item.m_shared == null || string.IsNullOrEmpty(item.m_shared.m_name) || item.m_stack <= 0)
+                {
+                    continue;
+                }
+
+                string identity = GetIngredientIdentity(item.m_shared.m_name, item.m_worldLevel);
+                counts.TryGetValue(identity, out int existing);
+                counts[identity] = (int)Math.Min(int.MaxValue, (long)existing + item.m_stack);
+            }
+
+            return counts;
+        }
+
+        private static List<RuneStorageCraftingIngredient> GetIngredients(
+            Recipe recipe,
+            Dictionary<string, int> inventoryCounts)
         {
             var requiredByIdentity = new Dictionary<string, RuneStorageCraftingIngredient>(StringComparer.Ordinal);
             if (recipe == null || recipe.m_resources == null) return new List<RuneStorageCraftingIngredient>();
@@ -414,11 +488,12 @@ namespace RuneStorage
                 .ThenBy(ingredient => ingredient.Identity, StringComparer.Ordinal)
                 .ToList();
 
-            if (inventory != null)
+            if (inventoryCounts != null)
             {
                 foreach (RuneStorageCraftingIngredient ingredient in result)
                 {
-                    ingredient.Available = CountIngredient(inventory, ingredient);
+                    inventoryCounts.TryGetValue(ingredient.Identity, out int available);
+                    ingredient.Available = available;
                 }
             }
 
@@ -484,14 +559,53 @@ namespace RuneStorage
                 && item.m_worldLevel == ingredient.WorldLevel;
         }
 
-        private static int FindBestNearbyLevel(Player player, CraftingStation requiredStation)
+        private static List<CraftingStation> FindNearbyStations(
+            Player player,
+            CraftingStation requiredStation,
+            ref List<CraftingStation> sceneFallback)
         {
-            if (player == null || requiredStation == null) return 0;
+            var candidates = new List<CraftingStation>();
+            if (player == null || requiredStation == null) return candidates;
 
-            int bestLevel = 0;
-            foreach (CraftingStation station in UnityEngine.Object.FindObjectsByType<CraftingStation>(FindObjectsSortMode.None))
+            if (!string.IsNullOrEmpty(requiredStation.m_name))
             {
-                if (station == null || !SameStationType(station, requiredStation) || !station.InUseDistance(player)) continue;
+                CraftingStation.FindStationsInRange(
+                    requiredStation.m_name,
+                    player.transform.position,
+                    Mathf.Max(30f, requiredStation.m_useDistance + 1f),
+                    candidates);
+            }
+            List<CraftingStation> nearby = candidates
+                .Where(station => station != null
+                    && station.isActiveAndEnabled
+                    && SameStationType(station, requiredStation)
+                    && station.InUseDistance(player))
+                .Distinct()
+                .ToList();
+            if (nearby.Count > 0) return nearby;
+
+            if (sceneFallback == null)
+            {
+                sceneFallback = UnityEngine.Object.FindObjectsByType<CraftingStation>(FindObjectsSortMode.None).ToList();
+            }
+
+            return sceneFallback
+                .Where(station => station != null
+                    && station.isActiveAndEnabled
+                    && SameStationType(station, requiredStation)
+                    && station.InUseDistance(player))
+                .Distinct()
+                .ToList();
+        }
+
+        private static int FindBestNearbyLevel(
+            Player player,
+            CraftingStation requiredStation,
+            ref List<CraftingStation> sceneFallback)
+        {
+            int bestLevel = 0;
+            foreach (CraftingStation station in FindNearbyStations(player, requiredStation, ref sceneFallback))
+            {
                 bestLevel = Math.Max(bestLevel, station.GetLevel(true));
             }
 
@@ -500,11 +614,9 @@ namespace RuneStorage
 
         private static bool HasNearbyStationAtLevel(Player player, CraftingStation requiredStation, int requiredLevel)
         {
-            if (player == null || requiredStation == null) return false;
-
-            foreach (CraftingStation station in UnityEngine.Object.FindObjectsByType<CraftingStation>(FindObjectsSortMode.None))
+            List<CraftingStation> sceneFallback = null;
+            foreach (CraftingStation station in FindNearbyStations(player, requiredStation, ref sceneFallback))
             {
-                if (station == null || !SameStationType(station, requiredStation) || !station.InUseDistance(player)) continue;
                 if (station.GetLevel(true) >= requiredLevel) return true;
             }
 
@@ -514,14 +626,26 @@ namespace RuneStorage
         private static bool SameStationType(CraftingStation instance, CraftingStation required)
         {
             if (instance == null || required == null) return false;
-            if (!string.IsNullOrEmpty(instance.m_name) && string.Equals(instance.m_name, required.m_name, StringComparison.Ordinal)) return true;
+            return SameStationName(instance.m_name, required.m_name)
+                || SameStationName(instance.gameObject.name, required.gameObject.name)
+                || SameStationName(instance.m_name, required.gameObject.name)
+                || SameStationName(instance.gameObject.name, required.m_name);
+        }
 
-            return string.Equals(NormalizePrefabName(instance.gameObject.name), NormalizePrefabName(required.gameObject.name), StringComparison.Ordinal);
+        private static bool SameStationName(string left, string right)
+        {
+            if (string.IsNullOrEmpty(left) || string.IsNullOrEmpty(right)) return false;
+            string normalizedLeft = NormalizePrefabName(left).TrimStart('$');
+            string normalizedRight = NormalizePrefabName(right).TrimStart('$');
+            return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetStationIdentity(CraftingStation station)
         {
-            return station == null ? HandCraftingStationId : NormalizePrefabName(station.gameObject.name);
+            if (station == null) return HandCraftingStationId;
+            return !string.IsNullOrEmpty(station.m_name)
+                ? station.m_name
+                : NormalizePrefabName(station.gameObject.name);
         }
 
         private static string GetStationDisplayName(CraftingStation station)

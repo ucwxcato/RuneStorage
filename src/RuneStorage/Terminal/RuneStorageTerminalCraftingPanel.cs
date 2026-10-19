@@ -183,7 +183,7 @@ namespace RuneStorage
             List<RuneStorageCraftingStationGroup> discoveredGroups;
             try
             {
-                discoveredGroups = RuneStorageCrafting.GetStationGroups(_player, container, _craftOutputToCore);
+                discoveredGroups = RuneStorageCrafting.GetStationGroups(_player);
                 _craftStationGroups = discoveredGroups
                     .Where(group => !group.RequiresStation || group.NearbyLevel > 0)
                     .ToList();
@@ -223,6 +223,21 @@ namespace RuneStorage
                 selected = _craftStationGroups[0];
                 _selectedCraftStationId = selected.Identity;
                 UpdateCraftStationTabSelection();
+            }
+
+            try
+            {
+                RuneStorageCrafting.BuildRecipeViews(_player, container, selected, _craftOutputToCore);
+            }
+            catch (Exception exception)
+            {
+                Plugin.Log.LogError($"RuneStorage recipe preview failed: {exception}");
+                ClearRows();
+                _summaryText.text = "Recipes unavailable";
+                _emptyText.text = "RuneStorage could not prepare this station's recipes. Close and reopen the terminal to try again.";
+                _emptyText.gameObject.SetActive(true);
+                SetStatus("The selected station's recipes could not be prepared safely.");
+                return;
             }
 
             _summaryText.text = selected.RequiresStation
