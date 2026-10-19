@@ -183,7 +183,7 @@ namespace RuneStorage
             List<RuneStorageCraftingStationGroup> discoveredGroups;
             try
             {
-                discoveredGroups = RuneStorageCrafting.GetStationGroups(_player);
+                discoveredGroups = RuneStorageCrafting.GetStationGroups(_player, marker, _terminal);
                 _craftStationGroups = discoveredGroups
                     .Where(group => !group.RequiresStation || group.NearbyLevel > 0)
                     .ToList();

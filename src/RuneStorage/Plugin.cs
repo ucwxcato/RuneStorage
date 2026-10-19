@@ -13,7 +13,7 @@ namespace RuneStorage
     {
         public const string GUID = "com.runestorage.valheim";
         public const string NAME = "RuneStorage";
-        public const string VERSION = "0.1.7";
+        public const string VERSION = "0.1.8";
 
         internal static ManualLogSource Log;
         private Harmony _harmony;
