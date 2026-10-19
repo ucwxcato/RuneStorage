@@ -65,6 +65,7 @@ When creating or updating RuneStorage custom items, buildable pieces, props, ter
 - Do not use `UnityEngine.Object.Instantiate(PrefabManager.Cache.GetPrefab<GameObject>(...))` as the final custom prefab and then wrap that direct clone in `CustomPiece`.
 - Direct cached-prefab instantiation can leave `WearNTear`, `ZNetView`, and other runtime references invalid, causing placement-ghost, placement, support, hover, or health `NullReferenceException` errors.
 - Attach custom visual children and assign custom icons after the Jötunn clone is created and before adding the custom piece or item to its manager.
+- For custom build-piece visuals, center the combined renderer bounds on the functional piece's build origin before adding the piece to `PieceManager`. Do not rely only on `LateUpdate` or another runtime correction: Valheim's placement ghost may not run the custom visual component, even when the placed piece does. Adjust visual position only; preserve its authored rotation and scale. Verify the ghost and placed object separately.
 - Disable only the base visual renderers replaced by the custom visual.
 - Log the resolved base prefab names and registration result.
 

@@ -112,8 +112,8 @@ namespace RuneStorage
             GameObject visual = UnityEngine.Object.Instantiate(visualSource);
             visual.name = VisualInstanceName;
             visual.SetActive(true);
-            // Keep the prefab's authored scale and facing; TerminalVisualAnchor only recenters its position.
             visual.transform.SetParent(functionalPrefab.transform, false);
+            CenterVisualOnBuildOrigin(functionalPrefab.transform, visual.transform);
 
             TerminalVisualAnchor anchor = functionalPrefab.GetComponent<TerminalVisualAnchor>();
             if (anchor == null) anchor = functionalPrefab.AddComponent<TerminalVisualAnchor>();
@@ -124,6 +124,30 @@ namespace RuneStorage
                 if (renderer.transform == visual.transform || renderer.transform.IsChildOf(visual.transform)) continue;
                 renderer.enabled = false;
             }
+        }
+
+        private static void CenterVisualOnBuildOrigin(Transform pieceRoot, Transform visual)
+        {
+            Renderer[] renderers = visual.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0)
+            {
+                Plugin.Log.LogWarning("RuneStorage terminal visual has no renderers to center before piece registration.");
+                return;
+            }
+
+            Bounds bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++)
+            {
+                bounds.Encapsulate(renderers[i].bounds);
+            }
+
+            Vector3 bottomCenter = new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+            Vector3 correction = pieceRoot.position - bottomCenter;
+            visual.position += correction;
+
+            Plugin.Log.LogInfo(
+                $"Pre-centered RuneStorage terminal visual before piece registration: correction={correction}, " +
+                $"localPosition={visual.localPosition}, localScale={visual.localScale}.");
         }
 
         private static bool LoadBundle()
