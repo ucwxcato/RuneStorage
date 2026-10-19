@@ -86,7 +86,7 @@ When creating or updating RuneStorage custom items, buildable pieces, props, ter
 - Use a per-core operation lock and validate inventory changes against the authoritative `Inventory`; handle player/core save boundaries without claiming cross-save atomicity.
 - Never retry a failed mutation blindly.
 - Do not clear unreadable or interrupted storage data automatically. Preserve diagnostics and require a deliberate recovery path.
-- Keep crafting from storage, automatic chest intake, multi-core networks, and wireless access out of the MVP unless the development plan is explicitly updated.
+- Core-backed crafting is explicitly in the MVP scope recorded in `DOCS/RUNESTORAGE_DEVPLAN.md`; do not defer or remove it based on older storage-only scope notes. Keep automatic chest intake, multi-core networks, and wireless access out of the MVP unless the plan is explicitly updated again.
 
 ## UI rule
 
@@ -94,6 +94,7 @@ When creating or updating RuneStorage custom items, buildable pieces, props, ter
 - Subscribe to `GUIManager.OnCustomGUIAvailable` and attach the screen beneath Jötunn's scene-safe custom GUI anchor.
 - Use Valheim-styled controls and scaling where available.
 - The UI is a searchable, aggregated view and request builder. It must never become a second storage authority or trust displayed counts during a transaction.
+- In the Craft station rail, keep Hand available for unlocked hand recipes and show a station type only when that type is detected within Valheim's crafting range. Keep detected but under-level stations visible so recipe requirements remain clear.
 - The existing mission-board panel is a layout reference only:
 
   ```text

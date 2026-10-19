@@ -80,6 +80,9 @@ namespace RuneStorage
         private static void SetItemListLayout(bool crafting)
         {
             if (_scrollView == null) return;
+            float width = crafting ? CraftListWidth : PanelWidth - 68f;
+            float height = crafting ? PanelHeight - 354f : PanelHeight - 334f;
+
             RectTransform rect = _scrollView.GetComponent<RectTransform>();
             SetRect(
                 rect,
@@ -87,8 +90,27 @@ namespace RuneStorage
                 Vector2.up,
                 Vector2.up,
                 new Vector2(34f, crafting ? -251f : -244f),
-                new Vector2(crafting ? CraftListWidth : PanelWidth - 68f,
-                    crafting ? PanelHeight - 354f : PanelHeight - 334f));
+                new Vector2(width, height));
+
+            ScrollRect scrollRect = _scrollView.GetComponentInChildren<ScrollRect>(true);
+            if (scrollRect == null) return;
+
+            SetRect(
+                scrollRect.GetComponent<RectTransform>(),
+                Vector2.up,
+                Vector2.up,
+                Vector2.up,
+                Vector2.zero,
+                new Vector2(width, height));
+            SetRect(
+                scrollRect.viewport,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                Vector2.zero,
+                new Vector2(width, height));
+
+            ConfigureContent(scrollRect.content);
         }
 
         private static void SetSearchLayout(bool crafting)
@@ -158,9 +180,13 @@ namespace RuneStorage
                 return;
             }
 
+            List<RuneStorageCraftingStationGroup> discoveredGroups;
             try
             {
-                _craftStationGroups = RuneStorageCrafting.GetStationGroups(_player, container, _craftOutputToCore);
+                discoveredGroups = RuneStorageCrafting.GetStationGroups(_player, container, _craftOutputToCore);
+                _craftStationGroups = discoveredGroups
+                    .Where(group => !group.RequiresStation || group.NearbyLevel > 0)
+                    .ToList();
             }
             catch (Exception exception)
             {
@@ -178,10 +204,15 @@ namespace RuneStorage
             {
                 ClearRows();
                 _selectedCraftStationId = null;
-                _summaryText.text = "No unlocked recipes";
-                _emptyText.text = "No unlocked normal recipes are available for crafting.";
+                bool waitingForStation = discoveredGroups.Any(group => group.RequiresStation);
+                _summaryText.text = waitingForStation ? "No nearby crafting tables" : "No unlocked recipes";
+                _emptyText.text = waitingForStation
+                    ? "Move within crafting range of a table to see its recipes here."
+                    : "No unlocked normal recipes are available for crafting.";
                 _emptyText.gameObject.SetActive(true);
-                SetStatus("Unlock a normal recipe to see it here.");
+                SetStatus(waitingForStation
+                    ? "Crafting tables appear in this list when detected nearby."
+                    : "Unlock a normal recipe to see it here.");
                 return;
             }
 

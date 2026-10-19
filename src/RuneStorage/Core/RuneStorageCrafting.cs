@@ -565,7 +565,11 @@ namespace RuneStorage
         private static ItemDrop.ItemData CreateOutput(Recipe recipe, Player player)
         {
             if (player == null || recipe == null || recipe.m_item == null || recipe.m_item.m_itemData == null || recipe.m_amount <= 0) return null;
+            GameObject outputPrefab = recipe.m_item.gameObject;
+            if (outputPrefab == null) return null;
+
             ItemDrop.ItemData output = recipe.m_item.m_itemData.Clone();
+            output.m_dropPrefab = outputPrefab;
             output.m_stack = recipe.m_amount;
             output.m_crafterID = player.GetPlayerID();
             output.m_crafterName = player.GetPlayerName();
