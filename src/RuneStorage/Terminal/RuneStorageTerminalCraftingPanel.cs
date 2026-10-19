@@ -242,9 +242,9 @@ namespace RuneStorage
 
             _summaryText.text = selected.RequiresStation
                 ? selected.NearbyLevel > 0
-                    ? $"{selected.DisplayName}  |  Nearby station level {selected.NearbyLevel}  |  {selected.Recipes.Count} unlocked recipes"
-                    : $"{selected.DisplayName}  |  No station in crafting range  |  {selected.Recipes.Count} unlocked recipes"
-                : $"Hand crafting  |  No station required  |  {selected.Recipes.Count} unlocked recipes";
+                    ? $"{selected.DisplayName}  |  Nearby station level {selected.NearbyLevel}  |  {selected.Recipes.Count} learned recipes"
+                    : $"{selected.DisplayName}  |  No station in crafting range  |  {selected.Recipes.Count} learned recipes"
+                : $"Hand crafting  |  No station required  |  {selected.Recipes.Count} learned recipes";
 
             if (!string.IsNullOrEmpty(_pendingCraftRequestId))
             {
@@ -267,6 +267,10 @@ namespace RuneStorage
             visible = visible.OrderBy(recipe => recipe.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(recipe => recipe.Identity, StringComparer.Ordinal)
                 .ToList();
+
+            Plugin.Log.LogInfo(
+                $"Crafting UI rows: tab='{selected.DisplayName}', source={selected.SourceRecipes.Count}, "
+                + $"views={selected.Recipes.Count}, search='{query}', visible={visible.Count}.");
 
             ClearRows();
             if (visible.Count == 0)

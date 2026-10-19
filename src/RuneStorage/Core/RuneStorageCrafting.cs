@@ -78,7 +78,7 @@ namespace RuneStorage
 
             foreach (Recipe recipe in ObjectDB.instance.m_recipes)
             {
-                if (!IsRecipeUnlocked(player, recipe)) continue;
+                if (!IsRecipeKnownForCatalog(player, recipe)) continue;
 
                 CraftingStation requiredStation = recipe.GetRequiredStation(1);
                 string stationId = GetStationIdentity(requiredStation);
@@ -97,7 +97,7 @@ namespace RuneStorage
                 group.SourceRecipes.Add(recipe);
             }
 
-            LogCraftingCatalog(core, terminal, groups.Values, ref sceneFallback);
+            LogCraftingCatalog(player, core, terminal, groups.Values, ref sceneFallback);
 
             return groups.Values
                 .OrderBy(group => group.DisplayName, StringComparer.OrdinalIgnoreCase)
@@ -122,6 +122,10 @@ namespace RuneStorage
             {
                 group.Recipes.Add(BuildRecipeView(player, coreInventory, inventoryCounts, recipe, group, outputToCore));
             }
+
+            Plugin.Log.LogInfo(
+                $"Crafting preview: tab='{group.DisplayName}', source={group.SourceRecipes.Count}, "
+                + $"views={group.Recipes.Count}, recipes=[{string.Join(", ", group.Recipes.Select(recipe => recipe.DisplayName))}].");
         }
 
         internal static string Craft(
@@ -290,22 +294,51 @@ namespace RuneStorage
                 && string.Equals(GetRecipeIdentity(recipe), recipeIdentity, StringComparison.Ordinal));
         }
 
+        private static bool IsRecipeKnownForCatalog(Player player, Recipe recipe)
+        {
+            if (player == null
+                || recipe == null
+                || recipe.m_item == null
+                || recipe.m_item.m_itemData == null
+                || recipe.m_item.m_itemData.m_shared == null
+                || !IsDlcAvailable(recipe.m_item.m_itemData))
+            {
+                return false;
+            }
+
+            return PlayerKnowsRecipe(player, recipe)
+                || (ZoneSystem.instance != null && ZoneSystem.instance.GetGlobalKey(GlobalKeys.AllRecipesUnlocked))
+                || player.NoCostCheat();
+        }
+
         private static bool IsRecipeUnlocked(Player player, Recipe recipe)
         {
             if (player == null || !IsNormalRecipe(recipe)) return false;
 
             ItemDrop.ItemData item = recipe.m_item.m_itemData;
-            string dlc = item.m_shared.m_dlc;
-            if (!string.IsNullOrEmpty(dlc)
-                && (DLCMan.instance == null || !DLCMan.instance.IsDLCInstalled(dlc)))
-            {
-                return false;
-            }
+            if (!IsDlcAvailable(item)) return false;
 
-            if (player.IsRecipeKnown(item.m_shared.m_name)) return true;
+            if (PlayerKnowsRecipe(player, recipe)) return true;
             if (ZoneSystem.instance != null && ZoneSystem.instance.GetGlobalKey(GlobalKeys.AllRecipesUnlocked)) return true;
 
             return player.NoCostCheat();
+        }
+
+        private static bool PlayerKnowsRecipe(Player player, Recipe recipe)
+        {
+            return player != null
+                && recipe != null
+                && recipe.m_item != null
+                && recipe.m_item.m_itemData != null
+                && recipe.m_item.m_itemData.m_shared != null
+                && player.IsRecipeKnown(recipe.m_item.m_itemData.m_shared.m_name);
+        }
+
+        private static bool IsDlcAvailable(ItemDrop.ItemData item)
+        {
+            string dlc = item != null && item.m_shared != null ? item.m_shared.m_dlc : null;
+            return string.IsNullOrEmpty(dlc)
+                || (DLCMan.instance != null && DLCMan.instance.IsDLCInstalled(dlc));
         }
 
         private static RuneStorageCraftingRecipe BuildRecipeView(
@@ -317,7 +350,19 @@ namespace RuneStorage
             bool outputToCore)
         {
             List<RuneStorageCraftingIngredient> ingredients = GetIngredients(recipe, inventoryCounts);
-            bool supported = IsSupportedRecipe(recipe, ingredients, out string unsupportedReason);
+            bool normalRecipe = IsNormalRecipe(recipe);
+            bool supported;
+            string unsupportedReason;
+            if (normalRecipe)
+            {
+                supported = IsSupportedRecipe(recipe, ingredients, out unsupportedReason);
+            }
+            else
+            {
+                supported = false;
+                unsupportedReason = GetNonCraftableRecipeReason(recipe);
+            }
+
             int requiredLevel = stationGroup.RequiresStation ? recipe.GetRequiredStationLevel(1) : 0;
             bool stationAvailable = !stationGroup.RequiresStation || stationGroup.NearbyLevel >= requiredLevel;
             bool ingredientsAvailable = ingredients.All(ingredient => ingredient.Available >= ingredient.Required);
@@ -340,8 +385,10 @@ namespace RuneStorage
                 : string.Join("   ", ingredients.Select(ingredient =>
                     $"{ingredient.DisplayName} {ingredient.Available.ToString(CultureInfo.InvariantCulture)}/{ingredient.Required.ToString(CultureInfo.InvariantCulture)}"));
 
-            string disabledReason = !supported
+            string disabledReason = !normalRecipe
                 ? unsupportedReason
+                : !supported
+                    ? unsupportedReason
                 : !stationAvailable
                     ? stationStatus
                     : !ingredientsAvailable
@@ -378,6 +425,15 @@ namespace RuneStorage
                 && recipe.m_item.m_itemData.m_shared != null
                 && !recipe.m_noCraftOnlyUpgrade
                 && recipe.m_repairStation == null;
+        }
+
+        private static string GetNonCraftableRecipeReason(Recipe recipe)
+        {
+            if (recipe == null) return "Valheim's recipe data is unavailable.";
+            if (!recipe.m_enabled) return "Valheim currently disables this recipe.";
+            if (recipe.m_noCraftOnlyUpgrade) return "This recipe is reserved for upgrading an existing item.";
+            if (recipe.m_repairStation != null) return "This is a repair recipe, not a new-item craft.";
+            return "Valheim does not mark this as a normal crafting recipe.";
         }
 
         private static bool IsSupportedRecipe(
@@ -623,6 +679,7 @@ namespace RuneStorage
         }
 
         private static void LogCraftingCatalog(
+            Player player,
             RuneStorageCoreMarker core,
             RuneStorageTerminalMarker terminal,
             IEnumerable<RuneStorageCraftingStationGroup> groups,
@@ -639,26 +696,50 @@ namespace RuneStorage
                 .SelectMany(group => group.SourceRecipes)
                 .Count();
             int unlockedRecipes = groupList.Sum(group => group.SourceRecipes.Count);
+            List<Recipe> learnedHandRecipes = ObjectDB.instance.m_recipes
+                .Where(recipe => PlayerKnowsRecipe(player, recipe))
+                .Where(recipe => recipe.GetRequiredStation(1) == null)
+                .ToList();
+            string learnedHandDetails = string.Join("; ", learnedHandRecipes
+                .Take(40)
+                .Select(recipe =>
+                {
+                    ItemDrop.ItemData item = recipe.m_item.m_itemData;
+                    bool dlcAvailable = IsDlcAvailable(item);
+                    string excludedBy = !recipe.m_enabled ? "disabled"
+                        : recipe.m_noCraftOnlyUpgrade ? "upgrade-only"
+                        : recipe.m_repairStation != null ? "repair"
+                        : !dlcAvailable ? "DLC unavailable"
+                        : "included";
+                    return $"{GetItemDisplayName(item)} [enabled={recipe.m_enabled}, upgradeOnly={recipe.m_noCraftOnlyUpgrade}, "
+                        + $"repair={recipe.m_repairStation != null}, dlcAvailable={dlcAvailable}, catalog={excludedBy}]";
+                }));
             string detectedStationTypes = string.Join(", ", groupList
                 .Where(group => group.RequiresStation && group.NearbyLevel > 0)
                 .Select(group => $"{group.DisplayName} Lv.{group.NearbyLevel}"));
-            string nearbyStations = string.Join(", ", sceneFallback
-                .Where(station => station != null && station.isActiveAndEnabled)
-                .Where(station =>
+            string stationComponents = string.Join("; ", sceneFallback
+                .Where(station => station != null)
+                .Select(station => new
                 {
-                    float range = station.m_useDistance;
-                    return range > 0f
-                        && (Vector3.Distance(station.transform.position, core.transform.position) < range
-                            || Vector3.Distance(station.transform.position, terminal.transform.position) < range);
+                    Station = station,
+                    CoreDistance = Vector3.Distance(station.transform.position, core.transform.position),
+                    TerminalDistance = Vector3.Distance(station.transform.position, terminal.transform.position)
                 })
-                .Select(station => $"{station.m_name} ({NormalizePrefabName(station.gameObject.name)}, use {station.m_useDistance:0.##}m)")
-                .Distinct()
-                .Take(12));
+                .OrderBy(entry => Math.Min(entry.CoreDistance, entry.TerminalDistance))
+                .Take(10)
+                .Select(entry =>
+                    $"{entry.Station.m_name}/{NormalizePrefabName(entry.Station.gameObject.name)} "
+                    + $"active={entry.Station.isActiveAndEnabled} use={entry.Station.m_useDistance:0.##}m "
+                    + $"core={entry.CoreDistance:0.##}m terminal={entry.TerminalDistance:0.##}m"));
 
             Plugin.Log.LogInfo(
                 $"Crafting scan: {unlockedRecipes} unlocked normal recipes ({handRecipes} Hand); "
+                + $"learned no-station recipes={learnedHandRecipes.Count}: "
+                + $"{(string.IsNullOrEmpty(learnedHandDetails) ? "none" : learnedHandDetails)}; "
                 + $"detected station types: {(string.IsNullOrEmpty(detectedStationTypes) ? "none" : detectedStationTypes)}; "
-                + $"near Core/Terminal: {(string.IsNullOrEmpty(nearbyStations) ? "none" : nearbyStations)}.");
+                + $"scene CraftingStation components={sceneFallback.Count}; "
+                + $"Core={core.transform.position}, Terminal={terminal.transform.position}; "
+                + $"nearest components: {(string.IsNullOrEmpty(stationComponents) ? "none" : stationComponents)}.");
         }
 
         private static bool SameStationType(CraftingStation instance, CraftingStation required)
