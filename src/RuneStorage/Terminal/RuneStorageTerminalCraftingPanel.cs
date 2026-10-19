@@ -9,8 +9,14 @@ namespace RuneStorage
 {
     internal static partial class RuneStorageTerminalPanel
     {
-        private static GameObject _craftStationScroll;
+        private const float CraftStationWidth = 250f;
+        private const float CraftStationX = PanelWidth - 34f - CraftStationWidth;
+        private const float CraftStationTop = -244f;
+        private const float CraftStationAreaHeight = PanelHeight - 344f;
+        private const float CraftListWidth = PanelWidth - 68f - CraftStationWidth - 24f;
+        private static GameObject _craftStationTabs;
         private static RectTransform _craftStationContent;
+        private static Text _craftStationHeader;
         private static Button _craftOutputButton;
         private static List<RuneStorageCraftingStationGroup> _craftStationGroups = new List<RuneStorageCraftingStationGroup>();
         private static string _selectedCraftStationId;
@@ -21,8 +27,9 @@ namespace RuneStorage
 
         private static void ResetCraftingPanelState()
         {
-            _craftStationScroll = null;
+            _craftStationTabs = null;
             _craftStationContent = null;
+            _craftStationHeader = null;
             _craftOutputButton = null;
             _craftStationGroups = new List<RuneStorageCraftingStationGroup>();
             _selectedCraftStationId = null;
@@ -32,79 +39,40 @@ namespace RuneStorage
 
         private static void BuildCraftControls(GUIManager gui)
         {
-            _craftStationScroll = gui.CreateScrollView(
-                _panel.transform,
-                true,
-                false,
-                0.22f,
-                4f,
-                gui.ValheimScrollbarHandleColorBlock,
-                SurfaceColor,
-                912f,
-                38f);
-            _craftStationScroll.transform.SetParent(_panel.transform, false);
-            _craftStationScroll.name = "RuneStorageCraftingStations";
+            _craftStationTabs = new GameObject("RuneStorageCraftingStations", typeof(RectTransform));
+            _craftStationTabs.transform.SetParent(_panel.transform, false);
             SetRect(
-                _craftStationScroll.GetComponent<RectTransform>(),
+                _craftStationTabs.GetComponent<RectTransform>(),
                 Vector2.up,
                 Vector2.up,
                 Vector2.up,
-                new Vector2(34f, -205f),
-                new Vector2(912f, 38f));
+                new Vector2(CraftStationX, CraftStationTop),
+                new Vector2(CraftStationWidth, CraftStationAreaHeight));
+            _craftStationContent = _craftStationTabs.GetComponent<RectTransform>();
 
-            ScrollRect scrollRect = _craftStationScroll.GetComponentInChildren<ScrollRect>(true);
-            if (scrollRect != null)
-            {
-                scrollRect.horizontal = true;
-                scrollRect.vertical = false;
-                scrollRect.scrollSensitivity = 240f;
-                _craftStationContent = scrollRect.content;
-                ConfigureCraftStationContent(_craftStationContent);
-            }
+            _craftStationHeader = CreateText(gui, "RuneStorageCraftStationHeader", "CRAFTING TABLES", _panel.transform,
+                Vector2.up, Vector2.up, new Vector2(CraftStationX, -205f), 16, AccentColor, CraftStationWidth, 34f, false);
+            if (_craftStationHeader != null) _craftStationHeader.alignment = TextAnchor.MiddleLeft;
 
             _craftOutputButton = CreateToolbarButton(
                 gui,
                 "RuneStorageCraftOutputDestination",
                 "Output: Player",
-                new Vector2(700f, -251f),
-                210f,
-                42f,
+                new Vector2(514f, -205f),
+                258f,
+                38f,
                 15,
                 ToggleCraftOutputDestination);
             SetAutomaticNavigation(_craftOutputButton);
-            _craftStationScroll.SetActive(false);
+            _craftStationTabs.SetActive(false);
+            if (_craftStationHeader != null) _craftStationHeader.gameObject.SetActive(false);
             _craftOutputButton.gameObject.SetActive(false);
-        }
-
-        private static void ConfigureCraftStationContent(RectTransform content)
-        {
-            if (content == null) return;
-
-            content.anchorMin = new Vector2(0f, 0f);
-            content.anchorMax = new Vector2(0f, 1f);
-            content.pivot = new Vector2(0f, 0.5f);
-            content.anchoredPosition = Vector2.zero;
-            content.sizeDelta = Vector2.zero;
-
-            HorizontalLayoutGroup layout = content.GetComponent<HorizontalLayoutGroup>();
-            if (layout == null) layout = content.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 5f;
-            layout.padding = new RectOffset(4, 4, 2, 2);
-            layout.childAlignment = TextAnchor.MiddleLeft;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = true;
-
-            ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>();
-            if (fitter == null) fitter = content.gameObject.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
         }
 
         private static void SetCraftControlsVisible(bool visible)
         {
-            if (_craftStationScroll != null) _craftStationScroll.SetActive(visible);
+            if (_craftStationTabs != null) _craftStationTabs.SetActive(visible);
+            if (_craftStationHeader != null) _craftStationHeader.gameObject.SetActive(visible);
             if (_craftOutputButton != null) _craftOutputButton.gameObject.SetActive(visible);
             UpdateCraftOutputButton();
         }
@@ -118,8 +86,9 @@ namespace RuneStorage
                 Vector2.up,
                 Vector2.up,
                 Vector2.up,
-                new Vector2(34f, crafting ? -294f : -244f),
-                new Vector2(912f, crafting ? 326f : 376f));
+                new Vector2(34f, crafting ? -251f : -244f),
+                new Vector2(crafting ? CraftListWidth : PanelWidth - 68f,
+                    crafting ? PanelHeight - 354f : PanelHeight - 334f));
         }
 
         private static void SetSearchLayout(bool crafting)
@@ -130,8 +99,8 @@ namespace RuneStorage
                 Vector2.up,
                 Vector2.up,
                 Vector2.up,
-                new Vector2(34f, crafting ? -251f : -205f),
-                new Vector2(crafting ? 570f : 350f, 38f));
+                new Vector2(34f, -205f),
+                new Vector2(crafting ? 460f : 350f, 38f));
         }
 
         private static void ToggleCraftOutputDestination()
@@ -299,38 +268,54 @@ namespace RuneStorage
             {
                 UnityEngine.Object.Destroy(_craftStationContent.GetChild(index).gameObject);
             }
-
             _craftStationTabSignature = signature;
             GUIManager gui = GUIManager.Instance;
             if (gui == null) return;
 
-            foreach (RuneStorageCraftingStationGroup group in groups)
+            int columns = groups.Count > 12 ? 2 : 1;
+            int rows = groups.Count == 0 ? 0 : Mathf.CeilToInt(groups.Count / (float)columns);
+            const float columnGap = 6f;
+            const float rowGap = 5f;
+            float tabWidth = (CraftStationWidth - columnGap * (columns - 1)) / columns;
+            float tabHeight = rows == 0
+                ? 0f
+                : Mathf.Clamp((CraftStationAreaHeight - rowGap * (rows - 1)) / rows, 26f, 44f);
+
+            for (int index = 0; index < groups.Count; index++)
             {
+                RuneStorageCraftingStationGroup group = groups[index];
                 string stationIdentity = group.Identity;
-                float width = Mathf.Clamp(34f + group.DisplayName.Length * 9f, 94f, 190f);
+                int column = index / rows;
+                int row = index % rows;
                 GameObject buttonObject = gui.CreateButton(
                     group.DisplayName,
                     _craftStationContent,
+                    new Vector2(0f, 1f),
+                    new Vector2(0f, 1f),
                     Vector2.zero,
-                    Vector2.zero,
-                    Vector2.zero,
-                    width,
-                    34f);
+                    tabWidth,
+                    tabHeight);
                 buttonObject.name = "RuneStorageStationTab_" + stationIdentity;
                 buttonObject.transform.SetParent(_craftStationContent, false);
-                LayoutElement layout = buttonObject.GetComponent<LayoutElement>();
-                if (layout == null) layout = buttonObject.AddComponent<LayoutElement>();
-                layout.minWidth = width;
-                layout.preferredWidth = width;
-                layout.minHeight = 34f;
-                layout.preferredHeight = 34f;
-                layout.flexibleWidth = 0f;
+                SetRect(
+                    buttonObject.GetComponent<RectTransform>(),
+                    new Vector2(0f, 1f),
+                    new Vector2(0f, 1f),
+                    new Vector2(0f, 1f),
+                    new Vector2(column * (tabWidth + columnGap), -row * (tabHeight + rowGap)),
+                    new Vector2(tabWidth, tabHeight));
 
                 Button button = buttonObject.GetComponent<Button>();
                 if (button == null) continue;
-                gui.ApplyButtonStyle(button, 14);
+                gui.ApplyButtonStyle(button, columns == 1 ? 15 : 13);
                 SetAutomaticNavigation(button);
                 SetButtonText(buttonObject, group.DisplayName);
+                Text label = button.GetComponentInChildren<Text>(true);
+                if (label != null)
+                {
+                    label.horizontalOverflow = HorizontalWrapMode.Wrap;
+                    label.verticalOverflow = VerticalWrapMode.Truncate;
+                }
                 button.onClick.AddListener(() => SelectCraftStation(stationIdentity));
             }
 
@@ -365,7 +350,7 @@ namespace RuneStorage
                 details += "   |   " + recipe.DisabledReason;
             }
 
-            int lines = Mathf.Clamp((details.Length + 84) / 85, 1, 4);
+            int lines = Mathf.Clamp((details.Length + 69) / 70, 1, 4);
             float height = 51f + lines * 18f;
             GameObject row = new GameObject("RuneStorageCraftRecipeRow", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
             row.transform.SetParent(_content, false);
@@ -387,9 +372,9 @@ namespace RuneStorage
 
             GUIManager gui = GUIManager.Instance;
             CreateRowText(gui, row.transform, "RecipeName", $"{recipe.DisplayName} x{recipe.OutputAmount}",
-                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(64f, -6f), 17, BodyTextColor, 680f, 25f, TextAnchor.MiddleLeft);
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(64f, -6f), 17, BodyTextColor, CraftListWidth - 180f, 25f, TextAnchor.MiddleLeft);
             CreateRowText(gui, row.transform, "RecipeRequirements", details,
-                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(64f, -31f), 14, BodyTextColor, 690f, lines * 18f, TextAnchor.UpperLeft);
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(64f, -31f), 14, BodyTextColor, CraftListWidth - 180f, lines * 18f, TextAnchor.UpperLeft);
 
             GameObject craftButtonObject = gui.CreateButton(
                 "Craft",

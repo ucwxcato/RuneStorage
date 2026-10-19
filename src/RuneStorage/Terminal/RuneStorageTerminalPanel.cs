@@ -16,8 +16,8 @@ namespace RuneStorage
             Amount
         }
 
-        private const float PanelWidth = 980f;
-        private const float PanelHeight = 710f;
+        private const float PanelWidth = 1100f;
+        private const float PanelHeight = 780f;
         private static readonly Color SurfaceColor = new Color(0.13f, 0.09f, 0.05f, 1f);
         private static readonly Color RowColor = new Color(0.19f, 0.13f, 0.07f, 1f);
         private static readonly Color AlternateRowColor = new Color(0.16f, 0.11f, 0.06f, 1f);
@@ -180,7 +180,7 @@ namespace RuneStorage
             _statusText = CreateText(gui, "RuneStorageStatus", _statusMessage, _panel.transform,
                 Vector2.up, Vector2.up, new Vector2(34f, -78f), 18, BodyTextColor, 900f, 30f, false);
             _summaryText = CreateText(gui, "RuneStorageSummary", "", _panel.transform,
-                Vector2.up, Vector2.up, new Vector2(34f, -110f), 18, AccentColor, 900f, 30f, false);
+                Vector2.up, Vector2.up, new Vector2(34f, -110f), 18, AccentColor, PanelWidth - 68f, 30f, false);
 
             _storedTabButton = CreateTabButton(gui, "Stored", new Vector2(34f, -159f), () => SelectTab(false));
             _depositTabButton = CreateTabButton(gui, "Deposit", new Vector2(150f, -159f), () => SelectTab(true));
@@ -290,19 +290,19 @@ namespace RuneStorage
                 4f,
                 gui.ValheimScrollbarHandleColorBlock,
                 SurfaceColor,
-                912f,
-                376f);
+                PanelWidth - 68f,
+                PanelHeight - 334f);
             _scrollView.transform.SetParent(_panel.transform, false);
             _scrollView.name = "RuneStorageItemList";
             RectTransform scrollRectTransform = _scrollView.GetComponent<RectTransform>();
-            SetRect(scrollRectTransform, Vector2.up, Vector2.up, Vector2.up, new Vector2(34f, -244f), new Vector2(912f, 376f));
+            SetRect(scrollRectTransform, Vector2.up, Vector2.up, Vector2.up, new Vector2(34f, -244f), new Vector2(PanelWidth - 68f, PanelHeight - 334f));
 
             ScrollRect scrollRect = _scrollView.GetComponentInChildren<ScrollRect>(true);
             if (scrollRect != null)
             {
                 scrollRect.horizontal = false;
                 scrollRect.vertical = true;
-                scrollRect.scrollSensitivity = 300f;
+                scrollRect.scrollSensitivity = 600f;
                 _content = scrollRect.content;
                 ConfigureContent(_content);
             }
@@ -318,7 +318,7 @@ namespace RuneStorage
             _emptyText.gameObject.SetActive(false);
 
             _helpText = CreateText(gui, "RuneStorageHelp", "", _panel.transform,
-                Vector2.up, Vector2.up, new Vector2(34f, -642f), 15, BodyTextColor, 912f, 30f, false);
+                Vector2.up, Vector2.up, new Vector2(34f, -PanelHeight + 68f), 15, BodyTextColor, PanelWidth - 68f, 30f, false);
 
             GameObject closeButtonObject = gui.CreateButton(
                 "Close",

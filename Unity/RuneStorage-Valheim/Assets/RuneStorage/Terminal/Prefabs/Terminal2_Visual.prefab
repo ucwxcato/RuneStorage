@@ -12,6 +12,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Terminal2_Visual
       objectReference: {fileID: 0}
+    - target: {fileID: -4174221627001887996, guid: b5352b6ef2d201a43b34ce51568b00c1, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: -5096885475534740675, guid: b5352b6ef2d201a43b34ce51568b00c1, type: 3}
     - target: {fileID: 2774220344278030320, guid: b5352b6ef2d201a43b34ce51568b00c1, type: 3}
       propertyPath: m_LocalScale.x
       value: 4

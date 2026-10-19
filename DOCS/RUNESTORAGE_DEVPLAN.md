@@ -11,6 +11,10 @@
 
 ## 0. Outcome
 
+**Runtime UI fix (2026-10-19):** The first crafting UI attempt failed during `GUIManager.OnCustomGUIAvailable`: Jötunn's scroll view content already had a `VerticalLayoutGroup`, so adding a `HorizontalLayoutGroup` failed and panel construction stopped at “Reading the Core inventory.” Disabling the inherited layout group restored construction. That interim DLL was deployed to Gale profile `VHouseholds-Admin` at SHA-256 `F5BE9E5485F14BF55EFC7D90FA43552B8BEEB9A8218682220E9D5F9C85B51BB4`; the fixed horizontal station strip was later replaced by the right-side rail described below.
+
+**Craft UI layout follow-up (2026-10-19):** Expanded the panel to 1100x780 and moved recipe-derived crafting-table tabs to a fixed right-side rail, leaving the left pane for search and recipes. This keeps station choices visible instead of hiding them in a horizontal strip. Stored-item list sensitivity is now 600 (up from 300). The Release build and capacity tests pass. The updated DLL has been deployed to `VHouseholds-Admin` and matches SHA-256 `792C0E05E0EEF7E316AEB6FAC20C6E400914CA47DEBAB03D93070186BC30BC8F`; in-game layout and scroll checks for this revision are pending.
+
 **Implementation checkpoint (2026-10-19):** The first Core-backed crafting slice is now implemented in source: Craft view with recipe-derived station tabs, search, one-craft actions, output-to-Player/Core toggle, live station/ingredient/output previews, Core-owner-routed requests, and serialized Core ingredient transactions. A clean Release build in an isolated output directory and the Core capacity model tests pass. The rebuilt DLL is deployed to `VHouseholds-Admin` (SHA-256 `A8DD3A267A1CF805C1E6C492ED70ACDE8D7586B56B1C9D2FD5D22D4DE842928A`), but it has not yet been verified in-game. Multiplayer behavior—especially delivery into another peer's character inventory—and save/reload, failure, and station-upgrade cases remain open. `Craft X` remains deferred.
 
 The player places a RuneStorage Terminal and one RuneStorage Core within range. The Core can be upgraded in place to increase its slot capacity. Interacting with the terminal opens searchable storage and crafting views backed by the Core's native Valheim `Container` inventory. The player can deposit items, search and sort stored totals, withdraw exact quantities, and craft recipes using ingredients held in the Core when the required nearby crafting station is available.
@@ -604,6 +608,9 @@ The current source includes owner-local transfer methods as a development slice.
 - [x] Implement Stored and Deposit tabs with occupied slots, active tier capacity, total item quantity, search, deterministic sorting, aggregate rows/icons, per-item Take/Deposit 1/5/X/All, and deposit-everything controls.
 - [x] Add Stored-tab Name/Amount sort controls with an ascending/descending arrow toggle.
 - [x] Set terminal list scroll sensitivity to 300 after follow-up feedback that the previous setting was still too slow; verify the new rate in-game.
+- [ ] Increase stored-item list scroll sensitivity from 300 to 600 and verify the faster rate in-game.
+- [ ] Runtime-check the expanded 1100x780 panel and fixed right-side crafting-station rail: all unlocked station tabs, recipe list, search, output toggle, status, and help text must fit without clipping at common resolutions.
+- [ ] Keep the crafting station tabs permanently visible without horizontal scrolling; if an unusually large modded station set needs a second column, verify every label remains legible and selectable.
 - [x] **Runtime confirmation (2026-10-19):** The user confirmed the UI works well and normal deposit/withdraw transfers work flawlessly.
 - [x] Refresh the screen from the live Core inventory after every successful mutation and reject stale selections.
 - [x] Add readable feedback for missing/ambiguous cores, invalid data, full storage, stale selections, and player-inventory capacity.
