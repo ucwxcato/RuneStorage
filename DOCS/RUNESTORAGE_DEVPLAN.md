@@ -351,7 +351,7 @@ Do not impose an artificial serialized item-payload limit on the native Containe
 
 Every deposit and withdrawal is a server-authoritative transfer between the player's inventory and the Core inventory:
 
-1. Validate the sender, player state, distance, access, target core, core revision, and request shape.
+1. Validate the sender, player state, distance, access, target Core, inventory-change token, and request shape.
 2. Acquire a per-core operation lock.
 3. Re-read the exact source and destination inventory state.
 4. Calculate the exact before/after item and slot delta.
@@ -491,10 +491,9 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
  - [x] Record the final terminal visual prefab name and AssetBundle label in the project plan before code attaches it to the Jotunn clone.
 - [x] Defer terminal particles for the MVP; use the imported runestone terminal visual as-is.
 - [ ] If an effect is revisited later, inspect it in a separate test prefab before changing the terminal visual.
-- [x] Inspect the current Valheim `ItemDrop.ItemData` save fields and identify which values are derived from the item prefab.
-- [ ] Implement the runtime item adapter and verify complete serialize/restore round trips before accepting items.
-- [ ] Measure the safe persistence payload budget for the selected ZDO/world-data API.
-- [ ] Define the first schema version and journal state transitions.
+- [x] Inspect the local Valheim `Container`, `Inventory.Save/Load`, and `Inventory.SetHeight` APIs; confirm the native Container persists inventory through its ZDO.
+- [ ] Verify in-game component initialization/load order and identify a safe point to apply the Core's saved tier before Container contents load.
+- [ ] Decide and test how the Core's built-in chest interaction is disabled or constrained so it cannot bypass the terminal's access and tier rules.
 - [ ] **Verify:** The repository has a clean buildable skeleton, the dependency versions are recorded, base prefab names are runtime-verified, and the capacity/persistence constraints are measurable.
 
 ### Phase 1 - Plugin and safe piece registration
@@ -510,26 +509,25 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 - [x] Add startup logs for plugin version, resolved base prefabs, piece names, and registration result; the 0.1.3 profile log confirms both bundles and pieces registered with `piece_chest_wood`.
 - [ ] **Verify:** Both pieces appear as valid buildable objects and their ghosts/placement work. The user confirmed Core ghost and placed alignment on 2026-10-18; hover/support/health checks still need testing.
 
-### Phase 2 - Core ledger and persistence
+### Phase 2 - Native Core inventory and tier capacity
 
-- [ ] Implement `StorageKey` and the metadata-preserving item record model.
-- [x] Implement and test Stage 1 capacity math for 20,000 total units and 256 distinct keys in the isolated ledger model; runtime item grouping remains a separate task.
-- [ ] Implement deterministic grouping for compatible stackable items.
-- [ ] Implement individual-record handling for non-stackable items.
-- [ ] Implement the versioned persistence codec with size checks, checksum/integrity validation, and migration hooks.
-- [ ] Attach the ledger to the placed core's valid runtime network object and persist the core revision.
-- [ ] Implement `Ready`, `Full`, `RecoveryRequired`, and `CorruptReadOnly` states.
-- [ ] Add tests for grouping, capacity boundaries, metadata preservation, deterministic ordering, malformed data, and schema version rejection.
-- [ ] **Verify:** A placed core can save and reload a populated ledger without losing item identity, exceeding the capacity rules, or resetting malformed data to empty.
+- [x] Define and test the slot dimensions for Tier I (256 slots) and proposed Tier II/III capacities (512/1,024 slots) in an isolated capacity model.
+- [ ] Retain the named-cloned Core `Container` and configure its base inventory dimensions for Tier I.
+- [ ] Add a Core component that binds to the native `Container`/`Inventory` without introducing a second item store.
+- [ ] Persist only the Core capacity tier separately in its ZDO and apply it safely before native inventory load.
+- [ ] Implement read-only aggregate grouping for compatible Core inventory items, retaining separate entries when item metadata differs.
+- [ ] Implement `Ready`, `Full`, and invalid-tier/transfer-recovery states as needed by verified runtime behavior.
+- [ ] Test occupied-slot counts, item identity preservation, height expansion, and native save/reload at each supported tier.
+- [ ] **Verify:** A placed Core saves and reloads its native Container contents, preserves all item metadata, and enforces its active slot capacity without a parallel ledger.
 
 ### Phase 3 - Server-authoritative transactions
 
-- [ ] Implement the per-core operation lock and monotonic revision check.
+- [ ] Implement the per-core operation lock and stale-inventory-change check.
 - [ ] Implement deposit preview without mutation.
-- [ ] Implement exact deposit transactions with journal intent, inventory validation, ledger delta, commit, and cleanup.
-- [ ] Implement exact withdrawal transactions with ledger reservation, inventory-space validation, item reconstruction, commit, and cleanup.
-- [ ] Implement the interrupted-operation recovery path and block new writes while recovery is unresolved.
-- [ ] Add access, distance, sender, core-state, and stale-revision validation at every request boundary.
+- [ ] Implement exact deposits between player and Core inventories, validating destination capacity before mutation.
+- [ ] Implement exact withdrawals from Core inventory, validating player inventory space before mutation.
+- [ ] Test whether a compact interrupted-transfer marker/recovery path is required; do not serialize duplicate item records.
+- [ ] Add access, distance, sender, core-state, and stale-inventory validation at every request boundary.
 - [ ] **Verify:** Deposit and withdrawal tests pass at the normal path, capacity boundaries, stale-request path, full-inventory path, out-of-range path, and forced-interruption path without duplication or silent item loss.
 
 ### Phase 4 - Terminal interaction and UI
@@ -538,8 +536,8 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 - [ ] Implement terminal interaction state and direct no-core/ambiguous-core/recovery messages.
 - [ ] Subscribe the screen to Jotunn `GUIManager.OnCustomGUIAvailable` and attach it to the scene-safe custom GUI anchor instead of maintaining an unmanaged permanent canvas.
 - [ ] Reuse the local mission-board panel's proven layout ideas for a scroll view, buttons, and TextMeshPro rows while adapting lifecycle and styling to Jotunn.
-- [ ] Implement the storage screen with total capacity, key count, search, deterministic sorting, item icons, quantities, deposit-all, and withdrawal controls.
-- [ ] Refresh the screen from the core revision after every successful mutation and reject stale selections.
+- [ ] Implement the storage screen with occupied slots, active tier capacity, total item quantity, search, deterministic sorting, aggregate rows/icons, deposit-all, and withdrawal controls.
+- [ ] Refresh the screen from the live Core inventory after every successful mutation and reject stale selections.
 - [ ] Add clear full-capacity, unsupported-item, inventory-full, and data-error feedback.
 - [ ] **Verify:** A player can place the two pieces, open the terminal, deposit a large material batch, find it by search, withdraw a chosen amount, and see correct status after moving the core out of range.
 
@@ -548,20 +546,20 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 - [ ] Run host/client tests with matching and mismatched plugin versions.
 - [ ] Validate server-side ownership/access behavior against the selected Valheim ward/build-access API.
 - [ ] Test simultaneous deposit and withdrawal requests against the same core.
-- [ ] Test player disconnects, server restart, world save/reload, terminal destruction, core destruction, and plugin unload during normal and journaled operations.
-- [ ] Add rate limiting or request debouncing if UI spam can create excessive RPC or ledger work.
+- [ ] Test player disconnects, server restart, world save/reload, terminal destruction, Core destruction, and plugin unload during normal transfers and any proven recovery-marker path.
+- [ ] Add rate limiting or request debouncing if UI spam can create excessive RPC or inventory scans.
 - [ ] Review logs for sensitive data, stale references, duplicate registrations, and exception paths.
-- [ ] **Verify:** Multiplayer and lifecycle tests show one authoritative ledger revision per committed operation and no unreconciled transaction remains hidden.
+- [ ] **Verify:** Multiplayer and lifecycle tests show one authoritative native inventory result per committed transfer and no partial transfer is hidden.
 
 ### Phase 6 - Upgrade path and post-MVP systems
 
-- [ ] Persist the Core's capacity tier and add an in-place upgrade path without changing its build-piece identity.
+- [ ] Add an in-place upgrade path that persists the Core's capacity tier without changing its build-piece identity.
 - [ ] Define and implement the Tier II upgrade item, recipe, validation, and visual/status feedback.
 - [ ] Add Tier III only after Tier II persistence and migration tests pass.
 - [ ] Decide whether multiple cores should merge into a network or remain separate storage systems.
 - [ ] Design the crafting integration around verified nearby workbench/forge requirements.
 - [ ] Add craft-from-storage preview, ingredient reservation, output delivery, and failure recovery as a separate transaction family.
-- [ ] **Verify:** Upgrading a populated Core in place preserves every existing entry, increases capacity without changing item identity or build-piece identity, and survives save/reload before crafting work begins.
+- [ ] **Verify:** Upgrading a populated Core in place preserves every existing item and slot position, increases capacity without changing item or build-piece identity, and survives save/reload before crafting work begins.
 
 ### Phase 7 - Release packaging and deployment
 
@@ -584,7 +582,7 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 - Whether the terminal uses a custom AssetBundle visual or an approved vanilla runestone visual with custom children.
 - Exact Hammer category and recipe costs.
 - Whether the first public MVP permits non-stackable equipment or initially limits storage to safely reconstructable stackable items.
-- The safe serialized payload budget and whether compression is needed.
+- Whether native Container persistence or inventory UI behavior imposes a practical slot ceiling below the proposed tiers.
 - The precise recovery behavior available when a player disconnects between a world-object save and a character-inventory save.
 - The final Stage 1 interaction radius after placement and multiplayer tests.
 - Whether build/ward access should be required for both placement and terminal use.

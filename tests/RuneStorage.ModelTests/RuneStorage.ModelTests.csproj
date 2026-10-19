@@ -7,6 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../../src/RuneStorage/Core/StorageLedger.cs" Link="StorageLedger.cs" />
+    <Compile Include="../../src/RuneStorage/Core/CoreTierCapacity.cs" Link="CoreTierCapacity.cs" />
   </ItemGroup>
 </Project>
