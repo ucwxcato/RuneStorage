@@ -423,8 +423,7 @@ namespace RuneStorage
                 && recipe.m_item != null
                 && recipe.m_item.m_itemData != null
                 && recipe.m_item.m_itemData.m_shared != null
-                && !recipe.m_noCraftOnlyUpgrade
-                && recipe.m_repairStation == null;
+                && !recipe.m_noCraftOnlyUpgrade;
         }
 
         private static string GetNonCraftableRecipeReason(Recipe recipe)
@@ -432,7 +431,6 @@ namespace RuneStorage
             if (recipe == null) return "Valheim's recipe data is unavailable.";
             if (!recipe.m_enabled) return "Valheim currently disables this recipe.";
             if (recipe.m_noCraftOnlyUpgrade) return "This recipe is reserved for upgrading an existing item.";
-            if (recipe.m_repairStation != null) return "This is a repair recipe, not a new-item craft.";
             return "Valheim does not mark this as a normal crafting recipe.";
         }
 
@@ -459,13 +457,16 @@ namespace RuneStorage
                 return false;
             }
 
+            bool usesUpgraderResources = UsesUpgraderResources(recipe);
             if (recipe.m_resources != null && recipe.m_resources.Any(requirement =>
-                requirement == null
-                || requirement.m_resItem == null
-                || requirement.m_resItem.m_itemData == null
-                || requirement.m_resItem.m_itemData.m_shared == null
-                || string.IsNullOrEmpty(requirement.m_resItem.m_itemData.m_shared.m_name)
-                || requirement.GetAmount(1) <= 0))
+            {
+                if (requirement == null) return true;
+                if (requirement.m_upgraderResource != usesUpgraderResources || requirement.GetAmount(1) <= 0) return false;
+                return requirement.m_resItem == null
+                    || requirement.m_resItem.m_itemData == null
+                    || requirement.m_resItem.m_itemData.m_shared == null
+                    || string.IsNullOrEmpty(requirement.m_resItem.m_itemData.m_shared.m_name);
+            }))
             {
                 reason = "This recipe has an ingredient RuneStorage cannot safely identify.";
                 return false;
@@ -507,9 +508,11 @@ namespace RuneStorage
         {
             var requiredByIdentity = new Dictionary<string, RuneStorageCraftingIngredient>(StringComparer.Ordinal);
             if (recipe == null || recipe.m_resources == null) return new List<RuneStorageCraftingIngredient>();
+            bool usesUpgraderResources = UsesUpgraderResources(recipe);
 
             foreach (Piece.Requirement requirement in recipe.m_resources)
             {
+                if (requirement != null && requirement.m_upgraderResource != usesUpgraderResources) continue;
                 if (requirement == null || requirement.m_resItem == null || requirement.m_resItem.m_itemData == null
                     || requirement.m_resItem.m_itemData.m_shared == null)
                 {
@@ -552,6 +555,12 @@ namespace RuneStorage
             }
 
             return result;
+        }
+
+        private static bool UsesUpgraderResources(Recipe recipe)
+        {
+            CraftingStation station = recipe != null ? recipe.GetRequiredStation(1) : null;
+            return station != null && station.m_upgrader;
         }
 
         private static int CountIngredient(Inventory inventory, RuneStorageCraftingIngredient ingredient)
@@ -630,7 +639,7 @@ namespace RuneStorage
                 .Where(station => station != null
                     && station.isActiveAndEnabled
                     && SameStationType(station, requiredStation)
-                    && IsWithinRuneStorageCraftingRange(station, requiredStation, core.transform.position, terminal.transform.position))
+                    && IsWithinRuneStorageCraftingRange(station, requiredStation, core, terminal))
                 .Distinct()
                 .ToList();
         }
@@ -668,14 +677,48 @@ namespace RuneStorage
         private static bool IsWithinRuneStorageCraftingRange(
             CraftingStation station,
             CraftingStation requiredStation,
-            Vector3 corePosition,
-            Vector3 terminalPosition)
+            RuneStorageCoreMarker core,
+            RuneStorageTerminalMarker terminal)
         {
             float range = station.m_useDistance > 0f ? station.m_useDistance : requiredStation.m_useDistance;
             if (range <= 0f) return false;
 
-            return Vector3.Distance(station.transform.position, corePosition) < range
-                || Vector3.Distance(station.transform.position, terminalPosition) < range;
+            Bounds stationBounds = GetVisualBoundsOrPoint(station.gameObject);
+            Bounds coreBounds = GetVisualBoundsOrPoint(core.gameObject);
+            Bounds terminalBounds = GetVisualBoundsOrPoint(terminal.gameObject);
+            return GetBoundsSeparation(stationBounds, coreBounds) < range
+                || GetBoundsSeparation(stationBounds, terminalBounds) < range;
+        }
+
+        private static Bounds GetVisualBoundsOrPoint(GameObject root)
+        {
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            bool foundBounds = false;
+            Bounds bounds = new Bounds(root.transform.position, Vector3.zero);
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+                if (!foundBounds)
+                {
+                    bounds = renderer.bounds;
+                    foundBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            return bounds;
+        }
+
+        private static float GetBoundsSeparation(Bounds first, Bounds second)
+        {
+            Vector3 separation = new Vector3(
+                Mathf.Max(0f, Mathf.Max(first.min.x - second.max.x, second.min.x - first.max.x)),
+                Mathf.Max(0f, Mathf.Max(first.min.y - second.max.y, second.min.y - first.max.y)),
+                Mathf.Max(0f, Mathf.Max(first.min.z - second.max.z, second.min.z - first.max.z)));
+            return separation.magnitude;
         }
 
         private static void LogCraftingCatalog(
@@ -708,11 +751,10 @@ namespace RuneStorage
                     bool dlcAvailable = IsDlcAvailable(item);
                     string excludedBy = !recipe.m_enabled ? "disabled"
                         : recipe.m_noCraftOnlyUpgrade ? "upgrade-only"
-                        : recipe.m_repairStation != null ? "repair"
                         : !dlcAvailable ? "DLC unavailable"
                         : "included";
                     return $"{GetItemDisplayName(item)} [enabled={recipe.m_enabled}, upgradeOnly={recipe.m_noCraftOnlyUpgrade}, "
-                        + $"repair={recipe.m_repairStation != null}, dlcAvailable={dlcAvailable}, catalog={excludedBy}]";
+                        + $"repairStation={recipe.m_repairStation != null}, dlcAvailable={dlcAvailable}, catalog={excludedBy}]";
                 }));
             string detectedStationTypes = string.Join(", ", groupList
                 .Where(group => group.RequiresStation && group.NearbyLevel > 0)
@@ -723,14 +765,22 @@ namespace RuneStorage
                 {
                     Station = station,
                     CoreDistance = Vector3.Distance(station.transform.position, core.transform.position),
-                    TerminalDistance = Vector3.Distance(station.transform.position, terminal.transform.position)
+                    TerminalDistance = Vector3.Distance(station.transform.position, terminal.transform.position),
+                    CoreVisualGap = GetBoundsSeparation(
+                        GetVisualBoundsOrPoint(station.gameObject),
+                        GetVisualBoundsOrPoint(core.gameObject)),
+                    TerminalVisualGap = GetBoundsSeparation(
+                        GetVisualBoundsOrPoint(station.gameObject),
+                        GetVisualBoundsOrPoint(terminal.gameObject))
                 })
                 .OrderBy(entry => Math.Min(entry.CoreDistance, entry.TerminalDistance))
                 .Take(10)
                 .Select(entry =>
                     $"{entry.Station.m_name}/{NormalizePrefabName(entry.Station.gameObject.name)} "
                     + $"active={entry.Station.isActiveAndEnabled} use={entry.Station.m_useDistance:0.##}m "
-                    + $"core={entry.CoreDistance:0.##}m terminal={entry.TerminalDistance:0.##}m"));
+                    + $"root={entry.Station.transform.position} core={entry.CoreDistance:0.##}m "
+                    + $"terminal={entry.TerminalDistance:0.##}m visualGapCore={entry.CoreVisualGap:0.##}m "
+                    + $"visualGapTerminal={entry.TerminalVisualGap:0.##}m"));
 
             Plugin.Log.LogInfo(
                 $"Crafting scan: {unlockedRecipes} unlocked normal recipes ({handRecipes} Hand); "
