@@ -9,21 +9,33 @@
     <OutputPath>bin/Release/net48/</OutputPath>
     <GeneratePathProperty>true</GeneratePathProperty>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- Valheim install folder. Override with -p:ValheimDir="..." if the game is installed elsewhere. -->
+    <ValheimDir Condition="'$(ValheimDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Valheim</ValheimDir>
+    <ValheimManagedDir>$(ValheimDir)\valheim_Data\Managed</ValheimManagedDir>
+    <!-- BepInEx, 0Harmony, and Jotunn are vendored under lib/BepInEx (see lib/BepInEx/VENDORED.txt). -->
+    <RuneStorageBepInExLibDir>$(MSBuildThisFileDirectory)..\..\lib\BepInEx</RuneStorageBepInExLibDir>
   </PropertyGroup>
 
+  <Target Name="CheckRuneStorageReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(ValheimManagedDir)\assembly_valheim.dll')"
+           Text="Valheim managed assemblies not found at '$(ValheimManagedDir)'. Pass -p:ValheimDir=&quot;C:\path\to\Valheim&quot;." />
+    <Error Condition="!Exists('$(RuneStorageBepInExLibDir)\BepInEx.dll')"
+           Text="Vendored BepInEx not found at '$(RuneStorageBepInExLibDir)'." />
+  </Target>
+
   <ItemGroup>
-    <Reference Include="BepInEx" HintPath="../../../Households-REPO/lib/BepInEx/core/BepInEx.dll" Private="false" />
-    <Reference Include="UnityEngine" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.dll" Private="false" />
-    <Reference Include="UnityEngine.CoreModule" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.CoreModule.dll" Private="false" />
-    <Reference Include="UnityEngine.AssetBundleModule" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.AssetBundleModule.dll" Private="false" />
-    <Reference Include="UnityEngine.TextRenderingModule" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.TextRenderingModule.dll" Private="false" />
-    <Reference Include="UnityEngine.UI" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.UI.dll" Private="false" />
-    <Reference Include="UnityEngine.InputLegacyModule" HintPath="../../../Households-REPO/lib/BepInEx/core/UnityEngine.InputLegacyModule.dll" Private="false" />
-    <Reference Include="assembly_valheim" HintPath="../../../Households-REPO/lib/BepInEx/core/assembly_valheim.dll" Private="false" />
-    <Reference Include="assembly_utils" HintPath="../../../Households-REPO/lib/BepInEx/core/assembly_utils.dll" Private="false" />
-    <Reference Include="assembly_guiutils" HintPath="../../../Households-REPO/lib/BepInEx/core/assembly_guiutils.dll" Private="false" />
-    <Reference Include="Jotunn" HintPath="../../../Households-REPO/lib/BepInEx/core/Jotunn.dll" Private="false" />
-    <Reference Include="0Harmony" HintPath="../../../Households-REPO/lib/BepInEx/core/0Harmony.dll" Private="false" />
+    <Reference Include="BepInEx" HintPath="$(RuneStorageBepInExLibDir)\BepInEx.dll" Private="false" />
+    <Reference Include="Jotunn" HintPath="$(RuneStorageBepInExLibDir)\Jotunn.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(RuneStorageBepInExLibDir)\0Harmony.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="$(ValheimManagedDir)\UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(ValheimManagedDir)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.AssetBundleModule" HintPath="$(ValheimManagedDir)\UnityEngine.AssetBundleModule.dll" Private="false" />
+    <Reference Include="UnityEngine.TextRenderingModule" HintPath="$(ValheimManagedDir)\UnityEngine.TextRenderingModule.dll" Private="false" />
+    <Reference Include="UnityEngine.UI" HintPath="$(ValheimManagedDir)\UnityEngine.UI.dll" Private="false" />
+    <Reference Include="UnityEngine.InputLegacyModule" HintPath="$(ValheimManagedDir)\UnityEngine.InputLegacyModule.dll" Private="false" />
+    <Reference Include="assembly_valheim" HintPath="$(ValheimManagedDir)\assembly_valheim.dll" Private="false" />
+    <Reference Include="assembly_utils" HintPath="$(ValheimManagedDir)\assembly_utils.dll" Private="false" />
+    <Reference Include="assembly_guiutils" HintPath="$(ValheimManagedDir)\assembly_guiutils.dll" Private="false" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
   </ItemGroup>
