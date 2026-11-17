@@ -81,6 +81,9 @@ namespace RuneStorage
             _sortAscending = true;
             _depositTabActive = false;
             _craftTabActive = false;
+            _upgradeTabActive = false;
+            _upgradeTabButton = null;
+            _upgradeButton = null;
             ResetCraftingPanelState();
 
             GUIManager gui = GUIManager.Instance;
@@ -177,10 +180,11 @@ namespace RuneStorage
             CreateSurface(_panel.transform);
             CreateText(gui, "RuneStorageTitle", "RuneStorage", _panel.transform,
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -34f), 30, AccentColor, 760f, 42f, true);
+            // Status messages can wrap to two lines; the box is sized for that so the second line is not clipped.
             _statusText = CreateText(gui, "RuneStorageStatus", _statusMessage, _panel.transform,
-                Vector2.up, Vector2.up, new Vector2(34f, -78f), 18, BodyTextColor, 900f, 30f, false);
+                Vector2.up, Vector2.up, new Vector2(34f, -70f), 18, BodyTextColor, 960f, 46f, false);
             _summaryText = CreateText(gui, "RuneStorageSummary", "", _panel.transform,
-                Vector2.up, Vector2.up, new Vector2(34f, -110f), 18, AccentColor, PanelWidth - 68f, 30f, false);
+                Vector2.up, Vector2.up, new Vector2(34f, -122f), 18, AccentColor, PanelWidth - 68f, 30f, false);
 
             _storedTabButton = CreateTabButton(gui, "Stored", new Vector2(34f, -159f), () => SelectTab(false));
             _depositTabButton = CreateTabButton(gui, "Deposit", new Vector2(150f, -159f), () => SelectTab(true));
@@ -281,6 +285,7 @@ namespace RuneStorage
             if (_sortLabel != null) _sortLabel.gameObject.SetActive(false);
             SetSortControlsVisible(false);
             BuildCraftControls(gui);
+            BuildUpgradeControls(gui);
 
             _scrollView = gui.CreateScrollView(
                 _panel.transform,
@@ -318,7 +323,7 @@ namespace RuneStorage
             _emptyText.gameObject.SetActive(false);
 
             _helpText = CreateText(gui, "RuneStorageHelp", "", _panel.transform,
-                Vector2.up, Vector2.up, new Vector2(34f, -PanelHeight + 68f), 15, BodyTextColor, PanelWidth - 68f, 30f, false);
+                Vector2.up, Vector2.up, new Vector2(34f, -PanelHeight + 68f), 15, BodyTextColor, PanelWidth - 68f, 40f, false);
 
             GameObject closeButtonObject = gui.CreateButton(
                 "Close",
@@ -494,12 +499,10 @@ namespace RuneStorage
 
         private static void DepositAll()
         {
-            SetStatus("Checking Core access and player inventory...");
-            SetStatus(RuneStorageTransactions.DepositAll(_player, _terminal));
-            RefreshRows();
+            RunTransfer(RuneStorageTransferKind.DepositAll, null, 0, -1, "Checking Core access and player inventory...");
         }
 
-        private static void Withdraw(string identity, int amount)
+        private static void Withdraw(string identity, int amount, int shownCount)
         {
             if (amount <= 0)
             {
@@ -507,12 +510,10 @@ namespace RuneStorage
                 return;
             }
 
-            SetStatus("Checking Core access and available inventory space...");
-            SetStatus(RuneStorageTransactions.Withdraw(_player, _terminal, identity, amount));
-            RefreshRows();
+            RunTransfer(RuneStorageTransferKind.Withdraw, identity, amount, shownCount, "Checking Core access and available inventory space...");
         }
 
-        private static void WithdrawCustom(string identity)
+        private static void WithdrawCustom(string identity, int shownCount)
         {
             if (_amountInput == null || !int.TryParse(_amountInput.text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int amount) || amount <= 0)
             {
@@ -520,20 +521,7 @@ namespace RuneStorage
                 return;
             }
 
-            Withdraw(identity, amount);
-        }
-
-        private static void DepositItem(string identity, int amount, bool allMatching = false)
-        {
-            if (!allMatching && amount <= 0)
-            {
-                SetStatus("Enter a whole-number amount greater than zero.");
-                return;
-            }
-
-            SetStatus("Checking Core access and player inventory...");
-            SetStatus(RuneStorageTransactions.Deposit(_player, _terminal, identity, amount, allMatching));
-            RefreshRows();
+            Withdraw(identity, amount, shownCount);
         }
 
         private static void DepositCustom(string identity)
@@ -547,8 +535,43 @@ namespace RuneStorage
             DepositItem(identity, amount);
         }
 
+        private static void DepositItem(string identity, int amount, bool allMatching = false)
+        {
+            if (!allMatching && amount <= 0)
+            {
+                SetStatus("Enter a whole-number amount greater than zero.");
+                return;
+            }
+
+            RuneStorageTransferKind kind = allMatching ? RuneStorageTransferKind.DepositIdentity : RuneStorageTransferKind.DepositExact;
+            RunTransfer(kind, identity, amount, -1, "Checking Core access and player inventory...");
+        }
+
+        private static void RunTransfer(RuneStorageTransferKind kind, string identity, int amount, int expectedQuantity, string progressMessage)
+        {
+            if (_player == null || _terminal == null)
+            {
+                SetStatus("The terminal or player is no longer available. Move closer and try again.");
+                return;
+            }
+
+            SetStatus(progressMessage);
+            string status = RuneStorageTransfers.Start(_player, _terminal, kind, identity, amount, expectedQuantity, out bool waiting);
+            SetStatus(status);
+            RefreshRows();
+        }
+
+        // Called by the Core marker when the Core owner answers a remote transfer request.
+        internal static void ReceiveTransferStatus(RuneStorageCoreMarker marker, string status)
+        {
+            if (string.IsNullOrEmpty(status)) return;
+            SetStatus(status);
+            if (_panel != null && _isOpen) RefreshRows();
+        }
+
         private static void SelectTab(bool deposit)
         {
+            LeaveUpgradeTab();
             bool wasCrafting = _craftTabActive;
             _depositTabActive = deposit;
             _craftTabActive = false;
@@ -579,7 +602,7 @@ namespace RuneStorage
             if (_helpText != null)
             {
                 _helpText.text = deposit
-                    ? "Deposit 1 or 5, enter an amount for Deposit X, or use All for that item group. Deposit Everything moves all unequipped items."
+                    ? "Deposit 1 or 5, enter an amount for Deposit X, or use Deposit all for that item group. Deposit Everything moves all unequipped items."
                     : "Choose Name or Amount to sort, then use the arrow for direction. Take 1 or 5, or enter an amount above for Take X.";
             }
 
@@ -589,6 +612,7 @@ namespace RuneStorage
 
         private static void SelectCraftTab()
         {
+            LeaveUpgradeTab();
             _depositTabActive = false;
             _craftTabActive = true;
             SetTabSelected(_storedTabButton, false);
@@ -737,6 +761,12 @@ namespace RuneStorage
                 return;
             }
 
+            if (_upgradeTabActive)
+            {
+                RefreshUpgradeView();
+                return;
+            }
+
             if (!RuneStorageCoreAccess.TryResolve(_player, _terminal, out _, out Container container, out string reason))
             {
                 ClearRows();
@@ -830,23 +860,24 @@ namespace RuneStorage
 
             GUIManager gui = GUIManager.Instance;
             CreateRowText(gui, row.transform, "ItemName", group.DisplayName,
-                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(64f, 0f), 17, BodyTextColor, 390f, 46f, TextAnchor.MiddleLeft);
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(64f, 0f), 17, BodyTextColor, 370f, 46f, TextAnchor.MiddleLeft);
             CreateRowText(gui, row.transform, "ItemCount", $"{group.Count.ToString("N0", CultureInfo.InvariantCulture)} {(_depositTabActive ? "carried" : "stored")}",
-                new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(_depositTabActive ? -326f : -302f, 0f), 16, AccentColor, 120f, 30f, TextAnchor.MiddleRight);
+                new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(_depositTabActive ? -454f : -302f, 0f), 16, AccentColor, 120f, 30f, TextAnchor.MiddleRight);
 
             string identity = group.Identity;
             if (_depositTabActive)
             {
-                CreateRowActionButton(gui, row.transform, "All", 14f, 68f, () => DepositItem(identity, 0, true));
-                CreateRowActionButton(gui, row.transform, "Dep X", 90f, 68f, () => DepositCustom(identity));
-                CreateRowActionButton(gui, row.transform, "Dep 5", 166f, 68f, () => DepositItem(identity, 5));
-                CreateRowActionButton(gui, row.transform, "Dep 1", 242f, 68f, () => DepositItem(identity, 1));
+                CreateRowActionButton(gui, row.transform, "Deposit all", 14f, 112f, () => DepositItem(identity, 0, true));
+                CreateRowActionButton(gui, row.transform, "Deposit X", 134f, 96f, () => DepositCustom(identity));
+                CreateRowActionButton(gui, row.transform, "Deposit 5", 238f, 96f, () => DepositItem(identity, 5));
+                CreateRowActionButton(gui, row.transform, "Deposit 1", 342f, 96f, () => DepositItem(identity, 1));
             }
             else
             {
-                CreateRowActionButton(gui, row.transform, "Take 1", 15f, 82f, () => Withdraw(identity, 1));
-                CreateRowActionButton(gui, row.transform, "Take 5", 105f, 82f, () => Withdraw(identity, 5));
-                CreateRowActionButton(gui, row.transform, "Take X", 195f, 82f, () => WithdrawCustom(identity));
+                int shownCount = (int)Math.Min(group.Count, int.MaxValue);
+                CreateRowActionButton(gui, row.transform, "Take 1", 15f, 82f, () => Withdraw(identity, 1, shownCount));
+                CreateRowActionButton(gui, row.transform, "Take 5", 105f, 82f, () => Withdraw(identity, 5, shownCount));
+                CreateRowActionButton(gui, row.transform, "Take X", 195f, 82f, () => WithdrawCustom(identity, shownCount));
             }
         }
 

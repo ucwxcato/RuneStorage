@@ -16,10 +16,20 @@
 >
 > **Authority:** This is the canonical implementation plan for the RuneStorage plugin. It owns the RuneStorage pieces, Core inventory and tier capacity, terminal interaction, transactions, packaging, and test gates.
 >
-> **Target:** Valheim with BepInEx and Jotunn, tested through the active Gale profile:
-> `C:\Users\magni\AppData\Roaming\com.kesomannen.gale\valheim\profiles\VHouseholds-Admin`
+> **Target:** Valheim with BepInEx 5.4.23.6 and Jotunn 2.30.2 (the versions in the test profile), tested through the RuneStorage Test r2modman profile:
+> `C:\Users\magni\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\RuneStorage Test`
+>
+> **Build:** the csproj is standalone. BepInEx, 0Harmony, and Jotunn are vendored under `lib/BepInEx/` (see `VENDORED.txt`). Valheim and Unity assemblies are read from the Steam install (override with `-p:ValheimDir=...`). A post-build step copies the Release DLL into the test profile's `BepInEx\plugins` when that profile exists. The .NET 8 SDK is installed; `dotnet build` and `dotnet run` work for the plugin and the model tests.
 
 ## 0. Outcome
+
+**Current state (2026-11-17, version 0.1.12):** The owner reports that the 0.1.12 build runs in Valheim on the RuneStorage Test profile and works for their own testing. Per-row verification is still open; this line does not close any checkbox. Version 0.1.12 adds:
+- Standalone build and automatic profile deployment (described under Target).
+- Chest-style access: anyone can use the Core and terminal unless a ward or private area denies them. Remote players send transfer and craft requests to the Core owner, which validates them and changes the Core. Each requester applies its own inventory side. Transfer planning (`StorageTransferPlanner`) checks capacity before anything moves.
+- Terminal layout fixes: two-line status and help text, and full deposit labels.
+- Owner decision: remote deposits trust the requester's item data, as vanilla chests do. No disconnect recovery journal is added (see Section 5).
+- Thunderstore icon from the owner, copied to `src/RuneStorage/Assets/icon.png`.
+- Owner confirmed in game (2026-11-17): save and reload keep stored items; inventory payment for upgrades works; both upgrade tiers work; Core destruction does not lose items; the hammer cannot remove a non-empty Core. Multiplayer, Tier III save and reload at higher tiers, and the message text are not yet recorded.
 
 **Runtime UI fix (2026-10-19):** The first crafting UI attempt failed during `GUIManager.OnCustomGUIAvailable`: Jötunn's scroll view content already had a `VerticalLayoutGroup`, so adding a `HorizontalLayoutGroup` failed and panel construction stopped at “Reading the Core inventory.” Disabling the inherited layout group restored construction. That interim DLL was deployed to Gale profile `VHouseholds-Admin` at SHA-256 `F5BE9E5485F14BF55EFC7D90FA43552B8BEEB9A8218682220E9D5F9C85B51BB4`; the fixed horizontal station strip was later replaced by the right-side rail described below.
 
@@ -53,6 +63,8 @@ The MVP is complete only when storage and Core-backed crafting work with the sup
 These decisions define the MVP. They may be revisited only if implementation evidence shows that a decision is incompatible with Valheim or Jotunn.
 
 - The mod name is **RuneStorage**.
+- Owner confirmed (2026-11-17) that the Terminal and Core visual assets may be redistributed in the Thunderstore package.
+- Access to the Core and terminal follows chest rules (owner decision, 2026-11-17): any player may use them unless a ward or private area denies that player. Remote players route requests to the Core owner, which runs the same checks.
 - The plugin identity is `com.runestorage.valheim`, assembly `RuneStorage`, version `0.1.3` for the initial Core build-piece integration.
 - The terminal AssetBundle is `runestorage_terminal`; its visual prefab asset is `Terminal2_Visual` and its icon asset is `Assets/RuneStorage/Terminal/Icons/RuneStorage_Terminal_Icon.png`.
 - The RuneStorage Core uses the imported source `Assets/RuneStorage/Core/Source/cyber_core.glb`, visual prefab `RuneStorage_Core_Visual`, build-piece ID `piece_runestorage_core`, icon `Assets/RuneStorage/Core/Icons/RuneStorage_Core_Icon.png`, and AssetBundle `runestorage_core`.
@@ -68,7 +80,11 @@ These decisions define the MVP. They may be revisited only if implementation evi
 - Stage 1 is mass storage: **Tier I has 256 inventory slots**. A slot holds a normal Valheim stack or one non-stackable item; total item count therefore depends on the mix of items and their normal stack limits.
 - Tier I is a **Bronze Age** unlock. The Core build recipe requires a Forge and costs **10 Bronze, 10 Fine Wood, and 4 Surtling Cores**.
 - The RuneStorage Terminal build recipe costs **10 Fine Wood, 10 Stone, and 2 Surtling Cores**.
-- Tier II and Tier III upgrade costs are still open. Do not change the locked Terminal or Tier I Core recipes without revisiting the progression decision.
+- Tier II and Tier III upgrade costs (owner approved 2026-11-17, not yet implemented):
+  - **Tier II (512 slots):** Iron age, Forge gate. Cost: 10 Iron, 10 Fine Wood, 4 Surtling Cores.
+  - **Tier III (1,024 slots):** Black metal age, Blackforge gate. Cost: 10 Black Metal, 10 Fine Wood, 6 Surtling Cores.
+  - Implemented (2026-11-17) as an in-place action on the terminal's Upgrade tab. Payment comes from the Core's stored items by default, or from the player's own unequipped inventory when the "Pay from" toggle is set to inventory. Remote player-paid upgrades take the exact ingredients on the requester's client and return them if the Core owner refuses, using the same trust model as remote deposits. The Core owner checks the station, the stored items, and each item name in ObjectDB before consuming anything. If an item name is missing, the upgrade is blocked with a message instead of guessing. Owner confirmed in game (2026-11-17) that both tier upgrades work, which also confirms the Iron and BlackMetal item names resolve in ObjectDB.
+  - Do not change the locked Terminal or Tier I Core recipes without revisiting the progression decision.
 - Proposed later capacities double the slot count: Tier II has 512 slots and Tier III has 1,024 slots. Treat these as design targets until tier resizing, inventory loading, and compatibility are verified in-game.
 - The terminal displays one aggregate row for compatible stored stacks, with the sum of their quantities. Items with different prefab identity or item-relevant metadata remain separate rows. Aggregation is presentation only; actual `ItemData` remains in the Core's `Container` inventory.
 - The MVP stores items in the Core's native inventory. It does not spawn a hidden pile of world containers and does not use the terminal inventory as a second storage authority.
@@ -89,8 +105,8 @@ These decisions define the MVP. They may be revisited only if implementation evi
 | Tier | Inventory slots | Status |
 |---|---:|---|
 | Tier I | 256 | Starting capacity target |
-| Tier II | 512 | Proposed in-place upgrade |
-| Tier III | 1,024 | Proposed in-place upgrade |
+| Tier II | 512 | Approved in-place upgrade (10 Iron, 10 Fine Wood, 4 Surtling Cores; Forge) |
+| Tier III | 1,024 | Approved in-place upgrade (10 Black Metal, 10 Fine Wood, 6 Surtling Cores; Blackforge) |
 
 These capacities correspond to a 16-slot inventory width and heights of 16, 32, and 64 rows. Tier II and Tier III remain proposals until the actual Core Container accepts the dimensions and the default chest interaction cannot bypass the active tier. Tier I and Terminal recipe costs are locked above; Tier II/III upgrade items and costs, visual feedback, and release timing remain open.
 
@@ -105,7 +121,7 @@ These capacities correspond to a 16-slot inventory width and heights of 16, 32, 
 - Make the terminal useful while the core is nearby and clearly unusable when it is missing, too far away, invalid, full, or recovering from a save problem.
 - Keep client requests untrusted and validate every deposit, withdrawal, range check, permission check, and capacity change on the authoritative side.
 - Rely on native `Container` save/load for item persistence and persist the Core tier separately through its ZDO state.
-- Package the mod for Thunderstore and deploy the built plugin to the active Gale profile after the release gates pass.
+- Package the mod for Thunderstore and deploy the built plugin to the RuneStorage Test r2modman profile after the release gates pass.
 
 ### Explicitly out of scope for the MVP
 
@@ -265,7 +281,7 @@ The current RuneStorage screen is implemented as a single panel with:
 
 The planned **Craft** view will use the same GUI lifecycle and Valheim visual language. It will have a station-specific tab for each supported station type, report that station's availability/effective upgrade level, and show only its eligible recipes. Ingredient availability comes from the Core. Recipe-list scale, filters, and disabled-tab appearance remain design decisions; the output destination defaults to player inventory and can be toggled to the Core.
 
-The UI is a searchable, aggregated view and request builder. It never becomes a second inventory or trusts its displayed counts as transaction authority. The Core's normal chest interaction is suppressed. Current source-level deposits/withdrawals re-resolve the Core and access state, require the local process to own the Core's ZNetView, and move the original `ItemData` between native inventories. A client that does not own the Core cannot transfer. A network request path for remote peers is still required before multiplayer transfers or Core-backed crafting can be enabled for remote clients.
+The UI is a searchable, aggregated view and request builder. It never becomes a second inventory or trusts its displayed counts as transaction authority. The Core's normal chest interaction is suppressed. Current source-level deposits/withdrawals re-resolve the Core and access state, require the local process to own the Core's ZNetView, and move the original `ItemData` between native inventories. A client that does not own the Core cannot transfer. Remote players send transfer and craft requests to the Core owner, which validates them and mutates the Core. The requester applies its own inventory side for transfers. Multiplayer behavior, including interruption at the save boundary, is unverified (Phase 3).
 
 ### Prefab and asset pipeline
 
@@ -431,6 +447,8 @@ Station tabs are keyed by actual crafting-station type, not display labels guess
 
 ### Interrupted operations
 
+**Decision (2026-11-17):** RuneStorage does not add a recovery journal, receipt markers, or reconnect reconciliation. A disconnect during a remote transfer behaves like the equivalent vanilla chest interaction, and the owner accepted that. The consequences are: a deposit can leave items in both the Core and the requester's inventory if the requester disconnects before the result arrives, and a withdrawal can lose items that left the Core but never reached the requester. Both are visible limitations, and they are not verified in multiplayer (Phase 5).
+
 If a disconnect, save, or plugin unload occurs during a transaction, test whether Valheim's inventory APIs can leave a partial transfer across the player's character save and the Core's world save. The normal operation must never report success unless both sides reflect the exact transfer. Only add a compact operation marker/recovery path if an observed engine boundary requires it; do not duplicate full item data into a custom journal. If recovery cannot safely reconcile the two inventories, block further writes and report the precise reason rather than guessing or clearing data.
 
 The plan must include a documented limitation for the boundary between world-object persistence and character-inventory persistence. A successful normal transaction is required to be loss-free in testing; crash behavior must be verified and any remaining engine limitation must be visible to the player rather than hidden.
@@ -511,6 +529,8 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 - Invalid or unsupported item metadata: leave the original inventory untouched.
 - Multiple nearby cores: refuse ambiguous access in the MVP.
 - Core destroyed during a request: abort, release the lock, and refresh the terminal state.
+- Hammer removal of a non-empty Core is blocked (decided 2026-11-17). `CoreRemovalPatches.cs` postfixes `Piece.CanBeRemoved` and `Container.CanBeRemoved` for RuneStorage Cores only. While a hammer is the current weapon, a center-screen message says the Core must be emptied first, at most once every two seconds. Owner confirmed in game (2026-11-17) that the hammer cannot remove a non-empty Core. The on-screen message has not been reported yet.
+- Core destroyed by damage or other means is not intercepted. Valheim's own container destruction path decides what happens to the Core's items. Owner confirmed in game (2026-11-17) that the items are not lost. The exact drop location and how a player recovers them are not yet written into the README. The terminal holds no items, so destroying it loses nothing.
 
 ## 8. Verification matrix
 
@@ -552,7 +572,7 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 | Multiplayer access | Server validates requests; a stale or out-of-range client request fails | Host/client test with logs |
 | Destruction/unload | Terminal stops using a destroyed/unloaded core | Manual test and no stale-reference errors |
 | Package contents | ZIP contains only approved release files | ZIP listing |
-| Active Gale deployment | Intended DLL is present in `VHouseholds-Admin` | File hash comparison and startup log |
+| Test profile deployment | Intended DLL is present in the RuneStorage Test profile | File hash comparison and startup log |
 
 ## 9. Phased checklist
 
@@ -574,7 +594,7 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 - [x] Inspect the local Valheim assembly: `Container.Awake` creates the inventory from prefab dimensions and schedules `CheckForChanges`; its `Load` reads the inventory blob from the Core ZDO.
 - [x] Apply the persisted tier in a Harmony prefix before the private `Container.Load` method restores inventory contents.
 - [x] Add Core-only Harmony guards for native `Container.Interact` and hover text; non-RuneStorage containers pass through unchanged.
-- [ ] Verify in-game placement, tier load, interaction suppression, and save/reload against the active Gale profile.
+- [ ] Verify in-game placement, tier load, interaction suppression, and save/reload against the RuneStorage Test profile.
 - [ ] **Verify:** The repository has a clean buildable skeleton, the dependency versions are recorded, base prefab names are runtime-verified, and the capacity/persistence constraints are measurable.
 
 ### Phase 1 - Plugin and safe piece registration
@@ -605,14 +625,14 @@ The package must not include `.pdb`, `obj`, `bin`, source files, local save data
 
 ### Phase 3 - Server-authoritative transactions
 
-The current source includes owner-local transfer methods as a development slice. The complete phase remains open: remote clients cannot submit transfers, and interruption recovery, stale-request validation, and host/client synchronization have not been proven.
+Source (version 0.1.12) implements the Core-owner transfer path. The Core owner runs deposits and withdrawals against the Core inventory; a remote player's request is routed to the owner over RPC and checked for sender, player, terminal link, terminal and Core ward access (the same rule chests use), Core state, and the expected stored quantity. Each requester applies its own inventory side, because a remote character's inventory is not safely writable from another peer. Capacity is planned with `StorageTransferPlanner` before anything moves. Interruption recovery, host/client behavior, and the verification rows remain unproven.
 
-- [ ] Implement the per-core operation lock and stale-inventory-change check.
-- [ ] Implement deposit preview without mutation.
-- [ ] Implement exact deposits between player and Core inventories, validating destination capacity before mutation.
-- [ ] Implement exact withdrawals from Core inventory, validating player inventory space before mutation.
-- [ ] Test whether a compact interrupted-transfer marker/recovery path is required; do not serialize duplicate item records.
-- [ ] Add access, distance, sender, core-state, and stale-inventory validation at every request boundary.
+- [x] Implement the per-core operation lock and stale-inventory-change check. (Lock: `RuneStorageTransactions`; stale check: withdrawals send the quantity the list showed and the owner rejects a mismatch. Deposits rely on the requester's own inventory. Build evidence only.)
+- [x] Implement deposit preview without mutation. (`StorageTransferPlanner` computes every placement before any item moves; covered by model tests. Build evidence only.)
+- [x] Implement exact deposits between player and Core inventories, validating destination capacity before mutation. (Exact amounts are all-or-nothing. "Deposit All" and a row's "All" keep partial deposits and report what did not fit. Build evidence only.)
+- [x] Implement exact withdrawals from Core inventory, validating player inventory space before mutation. (The requester checks its own space before sending; the owner removes the stored items only after packaging succeeds. Build evidence only.)
+- [x] Decide whether a compact interrupted-transfer marker/recovery path is required. Decision (2026-11-17): not added; disconnect behavior follows vanilla chest semantics, and the owner accepted the limitation (Section 5). Interruption tests remain in Phase 5.
+- [x] Add access, distance, sender, core-state, and stale-inventory validation at every request boundary. (Implemented for local and remote requests; remote requests use the same ward and Core access rules as chests. Build evidence only.)
 - [ ] **Verify:** Deposit and withdrawal tests pass at the normal path, capacity boundaries, stale-request path, full-inventory path, out-of-range path, and forced-interruption path without duplication or silent item loss.
 
 ### Phase 4 - Terminal interaction and UI
@@ -658,33 +678,34 @@ The current source includes owner-local transfer methods as a development slice.
 
 #### Capacity upgrades - after the first crafting slice
 
-- [ ] Add an Upgrade tab showing current/next tier and capacity, required versus available materials, and an in-place upgrade action.
-- [ ] Add an in-place upgrade path that persists the Core's capacity tier without changing its build-piece identity.
-- [ ] Define and implement the Tier II upgrade item, recipe, validation, and visual/status feedback.
-- [ ] Add Tier III only after Tier II persistence and migration tests pass.
+- [x] Add an Upgrade tab showing current/next tier and capacity, required versus available materials, and an in-place upgrade action. (Build evidence only, 2026-11-17; the tab shows each requirement with the stored count, and remote players route the action to the Core owner.)
+- [x] Add an in-place upgrade path that persists the Core's capacity tier without changing its build-piece identity. (Build evidence only. The tier is stored in the Core's ZDO and the inventory height is raised in place; the build piece is unchanged.)
+- [x] Define and implement the Tier II upgrade (10 Iron, 10 Fine Wood, 4 Surtling Cores; Forge gate) with validation and status feedback. Owner confirmed in game (2026-11-17) that the Tier II upgrade works. Which payment source and multiplayer cases were tested was not recorded.
+- [x] Define and implement the Tier III upgrade (10 Black Metal, 10 Fine Wood, 6 Surtling Cores; BlackForge gate). Owner confirmed in game (2026-11-17) that the Tier III upgrade works. Save/reload across the new tier and migration tests are still open.
 - [ ] Decide whether multiple cores should merge into a network or remain separate storage systems.
 - [ ] **Verify:** Upgrading a populated Core in place preserves every existing item and slot position, increases capacity without changing item or build-piece identity, and survives save/reload.
 
 ### Phase 7 - Release packaging and deployment
 
-- [ ] Set the first release version and synchronize it across the plugin, manifest, README, and package filename.
+- [x] Set the first release version and synchronize it across the plugin, manifest, README, and package filename. The first public version is 0.1.0 (owner decision, 2026-11-17). The plugin and csproj use 0.1.0; the manifest, README, and package filename are still to be written.
 - [ ] Add a player-facing README with exact build pieces, capacity behavior, requirements, limitations, and troubleshooting.
-- [ ] Add the final 256x256 Thunderstore icon after visual approval.
+- [x] Add the final 256x256 Thunderstore icon after visual approval. Owner-supplied black cat icon, copied to `src/RuneStorage/Assets/icon.png` (256x256 RGBA PNG, 2026-11-17).
 - [ ] Build a clean Release DLL and remove development artifacts from the staging directory.
 - [ ] Create the Thunderstore ZIP with only the approved package contents.
 - [ ] Inspect the ZIP listing and verify manifest dependencies and version.
 - [ ] Deploy the DLL and any required bundle to:
-  `C:\Users\magni\AppData\Roaming\com.kesomannen.gale\valheim\profiles\VHouseholds-Admin\BepInEx\plugins\`
+  `C:\Users\magni\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\RuneStorage Test\BepInEx\plugins\`
+  (A post-build step already copies the Release DLL there; the Thunderstore package deploy target is still to be chosen.)
 - [ ] Record source and deployed hashes without creating an automatic backup unless separately requested.
 - [ ] Start the active profile and capture the registration, placement, interaction, persistence, and error logs.
-- [ ] **Verify:** The package installs, the active Gale profile loads RuneStorage, both pieces work in-game, and the verification matrix has evidence for every required MVP row.
+- [ ] **Verify:** The package installs, the RuneStorage Test profile loads RuneStorage, both pieces work in-game, and the verification matrix has evidence for every required MVP row.
 
 ## 10. Open tuning points
 
 - Plugin GUID and author/package owner.
 - Exact terminal and core base prefab names after runtime cache inspection.
 - Whether the terminal uses a custom AssetBundle visual or an approved vanilla runestone visual with custom children.
-- Exact Tier II and Tier III upgrade recipes, stations, and resource costs.
+- Tier II and Tier III upgrade costs are approved (Section 1). Remaining: verify the item names and station gates at runtime.
 - Whether future versions should allow player-carried ingredients to supplement Core ingredients; the first slice uses Core ingredients only.
 - Whether future versions should include repair or upgrade actions; the first slice handles normal recipes only.
 - The final set of supported station types and mod-added recipe edge cases confirmed during runtime tests; the UI derives station tabs from registered recipes.
@@ -693,5 +714,5 @@ The current source includes owner-local transfer methods as a development slice.
 - Whether native Container persistence or inventory UI behavior imposes a practical slot ceiling below the proposed tiers.
 - The precise recovery behavior available when a player disconnects between a world-object save and a character-inventory save.
 - The final Stage 1 interaction radius after placement and multiplayer tests.
-- Whether build/ward access should be required for both placement and terminal use.
+- Whether build/ward access should be required for placement. Terminal and Core use follows chest rules (decided 2026-11-17).
 - The first public package version after Phase 7 passes.

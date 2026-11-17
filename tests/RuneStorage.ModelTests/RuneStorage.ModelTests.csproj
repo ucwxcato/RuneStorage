@@ -8,5 +8,7 @@
 
   <ItemGroup>
     <Compile Include="../../src/RuneStorage/Core/CoreTierCapacity.cs" Link="CoreTierCapacity.cs" />
+    <Compile Include="../../src/RuneStorage/Core/StorageTransferPlanner.cs" Link="StorageTransferPlanner.cs" />
+    <Compile Include="../../src/RuneStorage/Core/CoreTierUpgrades.cs" Link="CoreTierUpgrades.cs" />
   </ItemGroup>
 </Project>

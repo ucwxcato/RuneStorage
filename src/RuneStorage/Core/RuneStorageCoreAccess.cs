@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
@@ -11,6 +12,10 @@ namespace RuneStorage
         internal const float TerminalUseDistance = 5f;
         internal const float CoreRange = 12f;
         private static readonly MethodInfo CheckAccessMethod = AccessTools.Method(typeof(Container), "CheckAccess");
+        private static readonly FieldInfo PrivateAreaList = AccessTools.Field(typeof(PrivateArea), "m_allAreas");
+        private static readonly MethodInfo PrivateAreaIsEnabled = AccessTools.Method(typeof(PrivateArea), "IsEnabled");
+        private static readonly MethodInfo PrivateAreaIsInside = AccessTools.Method(typeof(PrivateArea), "IsInside", new[] { typeof(Vector3), typeof(float) });
+        private static readonly MethodInfo PrivateAreaIsPermitted = AccessTools.Method(typeof(PrivateArea), "IsPermitted", new[] { typeof(long) });
 
         internal static bool TryResolve(
             Player player,
@@ -31,6 +36,13 @@ namespace RuneStorage
             if (Vector3.Distance(player.transform.position, terminal.transform.position) > TerminalUseDistance)
             {
                 reason = "Move closer to the RuneStorage Terminal.";
+                return false;
+            }
+
+            // Same rule as chests: anyone can use the terminal unless a ward or private area denies them.
+            if (!HasAreaAccess(terminal.transform.position, player.GetPlayerID()))
+            {
+                reason = "This RuneStorage Terminal is inside a ward you do not have access to.";
                 return false;
             }
 
@@ -81,6 +93,38 @@ namespace RuneStorage
 
             reason = null;
             return true;
+        }
+
+        // Valheim's static PrivateArea.CheckAccess only answers for the local player, so the owner checks each
+        // enabled area that covers the point against the requesting player's permission list. The PrivateArea
+        // members are not public, so they are read through Harmony's AccessTools. Missing members fail closed.
+        internal static bool HasAreaAccess(Vector3 point, long playerId)
+        {
+            if (PrivateAreaList == null || PrivateAreaIsEnabled == null || PrivateAreaIsInside == null || PrivateAreaIsPermitted == null)
+            {
+                Plugin.Log.LogWarning("RuneStorage could not verify ward access (PrivateArea members not found); denying terminal and Core access.");
+                return false;
+            }
+
+            try
+            {
+                if (!(PrivateAreaList.GetValue(null) is IEnumerable areas)) return false;
+
+                foreach (object candidate in areas)
+                {
+                    if (!(candidate is PrivateArea area)) continue;
+                    if (!Convert.ToBoolean(PrivateAreaIsEnabled.Invoke(area, null))) continue;
+                    if (!Convert.ToBoolean(PrivateAreaIsInside.Invoke(area, new object[] { point, 0f }))) continue;
+                    if (!Convert.ToBoolean(PrivateAreaIsPermitted.Invoke(area, new object[] { playerId }))) return false;
+                }
+
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Plugin.Log.LogWarning($"RuneStorage ward access check failed: {exception.GetBaseException()}");
+                return false;
+            }
         }
 
         private static bool HasAccess(Container container, long playerId)

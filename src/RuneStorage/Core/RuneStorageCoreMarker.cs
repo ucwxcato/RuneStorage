@@ -8,6 +8,10 @@ namespace RuneStorage
     {
         private const string CraftRequestRpc = "RuneStorage_CraftRequest";
         private const string CraftResultRpc = "RuneStorage_CraftResult";
+        private const string TransferRequestRpc = "RuneStorage_TransferRequest";
+        private const string TransferResultRpc = "RuneStorage_TransferResult";
+        private const string UpgradeRequestRpc = "RuneStorage_UpgradeRequest";
+        private const string UpgradeResultRpc = "RuneStorage_UpgradeResult";
         private static readonly MethodInfo GetPeerMethod = AccessTools.Method(typeof(ZRoutedRpc), "GetPeer", new[] { typeof(long) });
         private bool _loadIssueLogged;
         private int _lastLoggedTier;
@@ -30,13 +34,159 @@ namespace RuneStorage
 
             _networkView.Register<string, bool, string>(CraftRequestRpc, ReceiveCraftRequest);
             _networkView.Register<string, string>(CraftResultRpc, ReceiveCraftResult);
+            _networkView.Register<string, string, string, int, int, string>(TransferRequestRpc, ReceiveTransferRequest);
+            _networkView.Register<string, bool, string, string>(TransferResultRpc, ReceiveTransferResult);
+            _networkView.Register<string, string, string>(UpgradeRequestRpc, ReceiveUpgradeRequest);
+            _networkView.Register<string, bool, string>(UpgradeResultRpc, ReceiveUpgradeResult);
         }
+
+        internal ZDO Zdo => _networkView != null ? _networkView.GetZDO() : null;
 
         private void OnDestroy()
         {
             if (_networkView == null) return;
             _networkView.Unregister(CraftRequestRpc);
             _networkView.Unregister(CraftResultRpc);
+            _networkView.Unregister(TransferRequestRpc);
+            _networkView.Unregister(TransferResultRpc);
+            _networkView.Unregister(UpgradeRequestRpc);
+            _networkView.Unregister(UpgradeResultRpc);
+        }
+
+        internal bool SendUpgradeRequest(string requestId, bool paidFromPlayer, string payload)
+        {
+            if (_networkView == null || string.IsNullOrEmpty(requestId)) return false;
+            _networkView.InvokeRPC(UpgradeRequestRpc, requestId, paidFromPlayer ? "player" : "core", payload ?? string.Empty);
+            return true;
+        }
+
+        // Runs on the Core owner. Same routed-sender, player, terminal, access, and distance checks as transfers.
+        private void ReceiveUpgradeRequest(long sender, string requestId, string source, string payload)
+        {
+            if (_networkView == null || !_networkView.IsOwner() || string.IsNullOrEmpty(requestId) || requestId.Length > 64) return;
+
+            bool ok = false;
+            string message = "The upgrade request failed validation. Nothing was upgraded.";
+            try
+            {
+                Player player = FindPlayerForPeer(sender);
+                Container container = GetComponent<Container>();
+                if (container == null) container = GetComponentInChildren<Container>(true);
+
+                if (player == null)
+                {
+                    message = "The Core could not verify the requesting player. Nothing was upgraded.";
+                }
+                else if (container == null)
+                {
+                    message = "The Core's native inventory could not be found. Nothing was upgraded.";
+                }
+                else if (!TryFindTerminalForPlayer(player, out RuneStorageTerminalMarker terminal, out string reason))
+                {
+                    message = reason;
+                }
+                else if (source != "core" && source != "player")
+                {
+                    message = "Unknown payment source. Nothing was upgraded.";
+                }
+                else if (source == "player" && string.IsNullOrEmpty(payload))
+                {
+                    message = "The ingredients for this upgrade were not sent. Nothing was upgraded.";
+                }
+                else
+                {
+                    System.Collections.Generic.List<ItemDrop.ItemData> requesterPayment = null;
+                    if (source == "player")
+                    {
+                        requesterPayment = RuneStorageTransfers.DeserializeItems(payload);
+                        if (requesterPayment == null) message = "The ingredients could not be read. Nothing was upgraded.";
+                    }
+
+                    if (source == "core" || requesterPayment != null)
+                    {
+                        message = RuneStorageCoreUpgrade.Upgrade(
+                            player,
+                            terminal,
+                            container,
+                            this,
+                            source == "player" ? RuneStorageUpgradeSource.Player : RuneStorageUpgradeSource.Core,
+                            requesterPayment,
+                            out ok);
+                    }
+                }
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.Log.LogError($"RuneStorage upgrade request validation failed: {exception}");
+                message = "The upgrade stopped during validation. Check the Core before trying again.";
+                ok = false;
+            }
+
+            _networkView.InvokeRPC(sender, UpgradeResultRpc, requestId, ok, message ?? string.Empty);
+        }
+
+        private void ReceiveUpgradeResult(long sender, string requestId, bool ok, string message)
+        {
+            ZDO zdo = _networkView != null ? _networkView.GetZDO() : null;
+            if (zdo == null || zdo.GetOwner() != sender) return;
+            RuneStorageTerminalPanel.ReceiveUpgradeStatus(this, requestId, ok, message);
+        }
+
+        internal bool SendTransferRequest(string kind, string identity, int amount, int expectedQuantity, string payload, string requestId)
+        {
+            if (_networkView == null || string.IsNullOrEmpty(kind) || string.IsNullOrEmpty(requestId)) return false;
+            _networkView.InvokeRPC(TransferRequestRpc, requestId, kind, identity ?? string.Empty, amount, expectedQuantity, payload ?? string.Empty);
+            return true;
+        }
+
+        // Runs on the Core owner for a remote player's transfer. The sender identity comes from the routed RPC,
+        // and the player, terminal, Core, access, and distance checks are repeated by TryFindTerminalForPlayer.
+        private void ReceiveTransferRequest(long sender, string requestId, string kind, string identity, int amount, int expectedQuantity, string payload)
+        {
+            if (_networkView == null || !_networkView.IsOwner() || string.IsNullOrEmpty(requestId) || requestId.Length > 64) return;
+
+            bool ok = false;
+            string message = "The transfer request failed validation. No items were moved.";
+            string responsePayload = string.Empty;
+            try
+            {
+                Player player = FindPlayerForPeer(sender);
+                Container container = GetComponent<Container>();
+                if (container == null) container = GetComponentInChildren<Container>(true);
+
+                if (player == null)
+                {
+                    message = "The Core could not verify the requesting player. No items were moved.";
+                }
+                else if (container == null)
+                {
+                    message = "The Core's native inventory could not be found. No items were moved.";
+                }
+                else if (!TryFindTerminalForPlayer(player, out _, out string reason))
+                {
+                    message = reason;
+                }
+                else
+                {
+                    RuneStorageTransfers.HandleRemoteRequest(this, container, player, kind, identity, amount, expectedQuantity, payload, out ok, out message, out responsePayload);
+                }
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.Log.LogError($"RuneStorage transfer request validation failed: {exception}");
+                message = "The transfer stopped during validation. Check both inventories before trying again.";
+                ok = false;
+            }
+
+            _networkView.InvokeRPC(sender, TransferResultRpc, requestId, ok, message ?? string.Empty, responsePayload ?? string.Empty);
+        }
+
+        private void ReceiveTransferResult(long sender, string requestId, bool ok, string message, string payload)
+        {
+            ZDO zdo = _networkView != null ? _networkView.GetZDO() : null;
+            if (zdo == null || zdo.GetOwner() != sender) return;
+            string status = RuneStorageTransfers.Complete(this, requestId, ok, message, payload);
+            RuneStorageTerminalPanel.ReceiveTransferStatus(this, status);
         }
 
         internal bool SendCraftRequest(string recipeIdentity, bool outputToCore, string requestId)

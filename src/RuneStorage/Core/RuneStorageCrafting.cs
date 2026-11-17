@@ -674,6 +674,21 @@ namespace RuneStorage
             return false;
         }
 
+        // Used by Core tier upgrades: is a station with this name within native use range of the Core and terminal?
+        internal static bool IsStationNearbyNamed(RuneStorageCoreMarker core, RuneStorageTerminalMarker terminal, string stationName)
+        {
+            if (core == null || terminal == null || string.IsNullOrEmpty(stationName)) return false;
+
+            foreach (CraftingStation station in UnityEngine.Object.FindObjectsByType<CraftingStation>(FindObjectsSortMode.None))
+            {
+                if (station == null || !station.isActiveAndEnabled) continue;
+                if (!SameStationName(station.m_name, stationName) && !SameStationName(station.gameObject.name, stationName)) continue;
+                if (IsWithinRuneStorageCraftingRange(station, station, core, terminal)) return true;
+            }
+
+            return false;
+        }
+
         private static bool IsWithinRuneStorageCraftingRange(
             CraftingStation station,
             CraftingStation requiredStation,
