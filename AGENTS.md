@@ -145,7 +145,7 @@ Before calling a RuneStorage milestone complete, verify the relevant boundary:
 Use this exact Gale profile for all current RuneStorage Valheim in-game testing and plugin deployment:
 
 ```text
-C:\Users\magni\AppData\Roaming\com.kesomannen.gale\valheim\profiles\VHouseholds-Admin
+"C:\Users\magni\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\RuneStorage Test"
 ```
 
 Deploy the plugin to its `BepInEx\plugins` directory. Do not create a backup copy during deployment unless the user specifically requests one.
