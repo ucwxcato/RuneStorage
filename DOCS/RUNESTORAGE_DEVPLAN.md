@@ -164,7 +164,7 @@ These capacities correspond to a 16-slot inventory width and heights of 16, 32, 
 3. The server identifies the exact player inventory items and checks whether the Core's native inventory can accept them within the active tier's slot dimensions.
 4. If the operation fits, the server transfers those actual item records to the Core `Inventory`; it does not serialize them into a parallel ledger.
 5. The UI refreshes from the Core inventory and shows aggregate totals computed from the stored stacks.
-6. If the operation does not fit, no item is removed and the UI reports the remaining slot capacity.
+6. If the operation does not fit, no item is removed and the UI reports the remaining slot capacity. Exception (owner decision, 2026-11-17): Deposit All and a group's "Deposit all" are explicit store-what-fits actions. They move as many items as fit, splitting a stack if needed, and report what remains in the player's inventory. Exact-amount deposits (1, 5, X) remain all-or-nothing.
 
 ### Withdraw
 
@@ -688,7 +688,7 @@ Source (version 0.1.12) implements the Core-owner transfer path. The Core owner 
 ### Phase 7 - Release packaging and deployment
 
 - [x] Set the first release version and synchronize it across the plugin, manifest, README, and package filename. The first public version is 0.1.0 (owner decision, 2026-11-17). The plugin and csproj use 0.1.0; the manifest, README, and package filename are still to be written.
-- [ ] Add a player-facing README with exact build pieces, capacity behavior, requirements, limitations, and troubleshooting.
+- [ ] Add a player-facing README with exact build pieces, capacity behavior, requirements, limitations, and troubleshooting. Drafted 2026-11-17 at `README.md` (GitHub) and `packaging/thunderstore/README.md` (package). Still to do: review, add the Thunderstore package link after publishing, the troubleshooting section, and a license choice. The package README's image uses the absolute GitHub URL, so the screenshot must be on `main` before publishing.
 - [x] Add the final 256x256 Thunderstore icon after visual approval. Owner-supplied black cat icon, copied to `src/RuneStorage/Assets/icon.png` (256x256 RGBA PNG, 2026-11-17).
 - [ ] Build a clean Release DLL and remove development artifacts from the staging directory.
 - [ ] Create the Thunderstore ZIP with only the approved package contents.
