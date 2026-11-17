@@ -23,6 +23,16 @@
            Text="Vendored BepInEx not found at '$(RuneStorageBepInExLibDir)'." />
   </Target>
 
+  <!-- Gale/r2modman RuneStorage Test profile. Built DLLs are copied here automatically when the profile exists. -->
+  <PropertyGroup>
+    <RuneStorageTestProfileDir Condition="'$(RuneStorageTestProfileDir)' == ''">$(APPDATA)\r2modmanPlus-local\Valheim\profiles\RuneStorage Test</RuneStorageTestProfileDir>
+  </PropertyGroup>
+
+  <Target Name="DeployToRuneStorageTestProfile" AfterTargets="Build" Condition="Exists('$(RuneStorageTestProfileDir)\BepInEx\plugins')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(RuneStorageTestProfileDir)\BepInEx\plugins" SkipUnchangedFiles="false" />
+    <Message Importance="high" Text="Deployed $(TargetFileName) to $(RuneStorageTestProfileDir)\BepInEx\plugins" />
+  </Target>
+
   <ItemGroup>
     <Reference Include="BepInEx" HintPath="$(RuneStorageBepInExLibDir)\BepInEx.dll" Private="false" />
     <Reference Include="Jotunn" HintPath="$(RuneStorageBepInExLibDir)\Jotunn.dll" Private="false" />
