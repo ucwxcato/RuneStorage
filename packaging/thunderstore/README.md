@@ -53,7 +53,3 @@ Source code, build steps, and the development plan: https://github.com/ucwxcato/
 - [BepInEx](https://github.com/BepInEx/BepInEx), LGPL-3.0.
 - [Harmony](https://github.com/pardeike/Harmony), MIT.
 - [Jötunn](https://github.com/Valheim-Modding/Jotunn), MIT.
-
-## License
-
-MIT. See the LICENSE file in the source repository: https://github.com/ucwxcato/RuneStorage/blob/main/LICENSE
