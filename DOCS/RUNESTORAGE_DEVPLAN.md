@@ -690,9 +690,9 @@ Source (version 0.1.12) implements the Core-owner transfer path. The Core owner 
 - [x] Set the first release version and synchronize it across the plugin, manifest, README, and package filename. The first public version is 0.1.0 (owner decision, 2026-11-17). The plugin and csproj use 0.1.0; the manifest, README, and package filename are still to be written.
 - [ ] Add a player-facing README with exact build pieces, capacity behavior, requirements, limitations, and troubleshooting. Drafted 2026-11-17 at `README.md` (GitHub) and `packaging/thunderstore/README.md` (package). Still to do: review, add the Thunderstore package link after publishing, the troubleshooting section, and a license choice. The package README's image uses the absolute GitHub URL, so the screenshot must be on `main` before publishing.
 - [x] Add the final 256x256 Thunderstore icon after visual approval. Owner-supplied black cat icon, copied to `src/RuneStorage/Assets/icon.png` (256x256 RGBA PNG, 2026-11-17).
-- [ ] Build a clean Release DLL and remove development artifacts from the staging directory.
-- [ ] Create the Thunderstore ZIP with only the approved package contents.
-- [ ] Inspect the ZIP listing and verify manifest dependencies and version.
+- [x] Build a clean Release DLL and remove development artifacts from the staging directory. `scripts/package_runestorage_thunderstore.ps1` runs a Release build and stages only the release files under `MODS/thunderstore/` (git-ignored). Build evidence only, 2026-11-17.
+- [x] Create the Thunderstore ZIP with only the approved package contents. `MODS/thunderstore/RuneStorage-0.1.0.zip` contains `manifest.json`, `README.md`, `icon.png`, and `BepInEx/plugins/RuneStorage.dll`, with forward-slash entry names. The packaged DLL matches the Release build hash.
+- [x] Inspect the ZIP listing and verify manifest dependencies and version. The manifest is version 0.1.0 with `denikson-BepInExPack_Valheim-5.4.2333` and `ValheimModding-Jotunn-2.30.2`. The dependency strings are not yet checked against Thunderstore's live package list, which needs the first upload.
 - [ ] Deploy the DLL and any required bundle to:
   `C:\Users\magni\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\RuneStorage Test\BepInEx\plugins\`
   (A post-build step already copies the Release DLL there; the Thunderstore package deploy target is still to be chosen.)
