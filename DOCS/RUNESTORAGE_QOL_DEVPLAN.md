@@ -9,10 +9,10 @@
 ## 0. Ground rules for every item
 
 - Storage authority does not change. The Core's native `Container`/`Inventory` is the only item store. Nothing here adds a ledger, a cached inventory copy used for a transaction, or a second serializer.
-- Views (category filter, sort, pins, search, can-craft preview) are client-side and never decide a transaction. Any mutation (deposit matching, protected-slot skip, click-to-take) goes through the existing server-validated transfer path and rechecks range, access, capacity, and stale inventory on the owner.
-- Clients do not receive the Core's inventory contents. Anything a client must show about the Core's fill level, such as hover text or the glow, needs a value the server writes to the Core's ZDO. Shared groundwork in Phase A covers this.
+- Views (category filter, sort, pins, search, can-craft preview) are client-side and never decide a transaction. Any mutation (deposit matching, hotbar/worn exclusion, click-to-take) goes through the existing server-validated transfer path and rechecks range, access, capacity, and stale inventory on the owner.
+- Whether a remote client's copy of the Core's contents is fresh is **not verified**. Anything a client must show about the Core's fill level, such as hover text or the glow, uses a value the server writes to the Core's ZDO (`RuneStorageFilledSlots`), so it does not depend on that copy. Shared groundwork in Phase A covers this.
 - Anything a player stores for themselves (pins) is per character, not per Core, and must not be treated as proof of anything by the server.
-- **Hard rule (owner decision, 2026-11-20):** Hotbar items and worn (equipped) items are never deposited, by any path: Deposit All, Deposit Everything, deposit matching, single-item Deposit 1/5/X, or a remote request. This is not a setting and not per character. The owner enforces it on the server, and clients cannot override it.
+- **Hard rule (owner decision, 2026-11-20):** Hotbar items and worn (equipped) items are never moved by a bulk deposit: Deposit All, Deposit Everything, or deposit matching. The owner enforces this on the server, including for remote requests, and it is not a setting or per-character option. These items stay visible in the Deposit tab. Explicit single-item deposits are an open question (see D9).
 - Every Valheim type, enum, field, and key name used by an item must be checked against `lib/BepInEx/` and `assembly_valheim.dll` at implementation time. Do not write names from memory.
 - UI follows the Jötunn `GUIManager` and Valheim-styled controls rules from `AGENTS.md`. Antislop UI and accessibility skills apply.
 
@@ -23,7 +23,8 @@
 | D1 | Pins: key by item prefab name (all qualities merge) or by full item identity (quality, durability, crafter)? | Prefab name. A pinned Iron Sword stays pinned for every copy. Identity-level pins are noisy. | Open |
 | D2 | Hotbar and worn items | **Resolved (owner, 2026-11-20):** never deposited by any path. Replaces the earlier protected-slot toggle, which is removed. | Decided |
 | D3 | Should the hotbar and worn exclusion be enforced on the server? | **Resolved:** yes. The owner rejects or skips those items in every deposit path. Client-side hiding is for display only. | Decided |
-| D8 | Should hotbar and worn items appear in the Deposit tab list? | Hide them, since worn items are already hidden. A single line of text explains that hotbar and worn items are never stored. | Open |
+| D8 | Should hotbar and worn items appear in the Deposit tab list? | **Resolved (owner, 2026-11-20):** yes, keep them visible. Do not hide them. Only the bulk deposit buttons skip them. Note: worn items are currently hidden from that list, so this changes existing behavior. | Decided |
+| D9 | Should explicit single-item deposits (Deposit 1/5/X on a row) also refuse hotbar and worn items? | Unanswered. The owner's latest instruction names only Deposit All. Their earlier wording ("ever") may cover single-item deposits too. Ask before implementing. | Open |
 | D4 | Deposit matching: which items count as "matching"? | Items that would merge into an existing Core row under `RuneStorageItemGroups.GetIdentity`. Because identity includes durability and the equipped flag, damaged or equipped gear will rarely match. That is the intended safety behavior. | Open |
 | D5 | Default hotkeys (deposit matching, click shortcuts) | Config-driven `KeyCode` entries, defaulted to a key that does not conflict with Valheim bindings. Pick the default after checking the Valheim input map. | Open |
 | D6 | Category source | Map from the item's `ItemType` (verify the enum), with trophies and ammo handled explicitly. | Open |
@@ -32,13 +33,14 @@
 ## 2. Phase A - Shared groundwork
 
 - [ ] Verify in `assembly_valheim.dll` the `ItemDrop.ItemData` type fields and `ItemDrop.ItemData.ItemType` enum values needed for category mapping (item 5), and record the exact names here.
-- [ ] Verify the Valheim input API used by Valheim's own UI (`Input.GetKey`, `Input.GetKeyDown`, and modifier handling) against `UnityEngine.InputLegacyModule` before writing hotkey code (item 3, 8).
-- [ ] Verify how the terminal currently obtains Core contents on the client (the existing snapshot/refresh path in `RuneStorageTerminalPanel`). Items 11 and any client display depend on this path, so document it before reusing it.
-- [ ] Add a server-written fill count to the Core's ZDO (for example key `RuneStorage.FilledSlots`, int). Update it after every successful Core inventory mutation (deposit, withdraw, craft output and consumption, tier upgrade, and load). Clients read it; they never write it.
-- [ ] Decide the update rule for the fill count so it is not stale after a native save load. Recompute on Core `Awake` after native load and on every mutation path.
-- [ ] Add a per-character client settings store for pins. Location and format are decided in the first implementation step, and must be keyed by the character's player ID, not by Core or world.
-- [ ] Verify the hotbar slot indices for Valheim's player inventory (the hotbar row in `Inventory` grid positions). The hotbar exclusion (item 4) must match the engine's actual layout, not an assumed one.
-- [ ] **Verify (Phase A):** The fill count matches the Core's occupied slot count after deposit, withdraw, craft, tier upgrade, and save/reload on the host, and a client reads the same value.
+- [x] Verify the input API. `UnityEngine.Input.GetKey`, `GetKeyDown`, and `GetKeyUp` are public static methods in `UnityEngine.InputLegacyModule.dll` (probe, 2026-11-20). Modifier keys use `GetKey` with `KeyCode.LeftShift` and `KeyCode.LeftControl`. Hotkey code is not written yet.
+- [x] Verify item fields and enum (build-time probe of `assembly_valheim.dll`, 2026-11-20). `ItemDrop.ItemData` has `m_stack`, `m_gridPos`, `m_equipped`, `m_shared`, `m_customData`, `m_quality`, `m_variant`, `m_worldLevel`, `m_durability`, `m_crafterID`, `m_crafterName`, `m_dropPrefab`, and `m_cheated`. `ItemType` values: None, Material, Consumable, OneHandedWeapon, Bow, Shield, Helmet, Chest, Ammo, Customization, Legs, Hands, Trophy, TwoHandedWeapon, Torch, Misc, Shoulder, Utility, Tool, Attach_Atgeir, Fish, TwoHandedWeaponLeft, AmmoNonEquipable, Trinket.
+- [x] Confirm `SharedData` has no footprint size (only `m_maxStackSize` and `m_setSize`), so each item occupies one inventory cell and "slots" equals the number of stored items. The terminal's existing "occupied slots" count (`allItems.Count`) is therefore correct.
+- [x] Confirm `Inventory.Changed(bool, bool)` is private and `Inventory.m_onChanged` is public. Confirm `ZDO.Set(string, int)` and `ZDO.GetInt(string, out int)`.
+- [x] Add a server-written fill count (ZDO key `RuneStorageFilledSlots`, int) in `RuneStorageCoreMarker`. Owner-only and throttled to once per second, so it covers every mutation path (deposit, withdraw, craft, upgrade, load) without one hook per call site. Clients read it and never write it. Build evidence only.
+- [x] Update rule: the fill count is republished when it changes, so it is never stale for more than about 1 second. A first publish happens on the first owner update after load. Build evidence only; in-game timing is unverified.
+- [x] Add the per-character pins store (`Terminal/RuneStoragePinStore.cs`). Decided format: a plain text file at `BepInEx\config\RuneStorage\pins.txt`, one `playerId<TAB>prefabName` line per pin. Keyed by the character's player ID, so it is not shared between characters or worlds. Pins are keyed by prefab name (D1). Lines that cannot be parsed are kept unchanged and never dropped. The server never reads this file. Build evidence only; the pin UI is item 7.
+- [x] Use `Inventory.GetHotbar()` as the source of hotbar membership for item 4, instead of hard-coding a row index. The probe confirmed the method exists on `Inventory` and returns a `List<ItemDrop.ItemData>`. Its exact row definition is not visible to reflection, so confirm it in game: the hotbar items the method returns must match what the hotbar shows (Verify item below).
 
 ## 3. Phase B - Small, low-risk items
 
@@ -96,12 +98,13 @@
 
 This replaces the earlier protected-slot idea. There is no toggle and nothing is stored per character.
 
-- [ ] **Known gap in shipped code (2026-11-20):** Deposit All and Deposit Everything (`RuneStorageTransfers`, bulk path) skip only `m_equipped` items, so hotbar items are deposited today. The single-item identity deposit path has no server-side equipped or hotbar check; it relies on the client's list. Both must be fixed before any new deposit feature ships.
-- [ ] Add one server-side predicate, `IsStorable(item, inventory)`, that returns false for equipped items and for items in the hotbar row. Every deposit path calls it on the owner: Deposit All, Deposit Everything, deposit matching, and single-item deposits, including remote requests.
-- [ ] A single-item request for a hotbar or worn item is refused with a clear message, and no items move. A bulk request skips those items and reports them in the result note, for example "Hotbar and worn items were not stored."
-- [ ] Hide hotbar and worn items from the Deposit tab list (D8), with one line of text that explains the rule.
-- [ ] Hotbar and worn items are excluded on the owner even when the client sends an identity that matches a stored group.
-- [ ] **Verify:** Hotbar and worn items never move through any deposit path, for host and remote client. A crafted request naming a hotbar or worn item is refused. Items already in the Core are unaffected. The rule holds after restart and after changing the hotbar layout.
+- [ ] **Known gap in shipped code (2026-11-20):** Deposit All and Deposit Everything (`RuneStorageTransfers`, bulk path) skip only `m_equipped` items, so hotbar items are deposited today. Fix this first (suggested order step 0).
+- [ ] Add one server-side predicate, `IsStorable(item, inventory)`, that returns false for equipped items and for items in the hotbar row. Bulk paths on the owner call it: Deposit All, Deposit Everything, and deposit matching, including remote requests.
+- [ ] A bulk request skips hotbar and worn items and reports them in the result note, for example "Hotbar and worn items were not stored."
+- [ ] Hotbar and worn items stay visible in the Deposit tab (D8). Their Deposit 1/5/X controls follow D9.
+- [ ] The owner excludes hotbar and worn items even when a client sends an identity that matches a stored group, so a crafted bulk request cannot bypass the rule.
+- [ ] Confirm the hotbar row index against the engine's inventory layout (Phase A) before relying on it.
+- [ ] **Verify:** Deposit All, Deposit Everything, and deposit matching never move a hotbar or worn item, for host and remote client. The result note names what was skipped. Items already in the Core are unaffected. The rule holds after restart and after changing the hotbar layout.
 
 ## 6. Phase E - Visual feedback
 
@@ -123,7 +126,7 @@ Each item needs all of the following before it is marked complete.
 | Clean Release build | 0 warnings, 0 errors, DLL SHA-256 recorded |
 | Host, single player | Item behaves as described in its Verify line |
 | Remote client | Same behavior, and any displayed Core state matches the host |
-| Save/reload and restart | Pins, protected slots, and fill count survive |
+| Save/reload and restart | Pins and fill count survive; hotbar and worn items stay out of the Core |
 | Authority | Owner revalidates every mutation; a crafted or stale request changes nothing |
 | Non-RuneStorage containers | Chest and other container hover text and interaction are unchanged |
 | Logs | No exceptions; debug output off by default |
@@ -134,11 +137,10 @@ Each item needs all of the following before it is marked complete.
 1. Phase A: groundwork and the fill count. Everything later depends on it.
 2. Phase B: hover text (6), click shortcuts (8), pins (7).
 3. Phase C: category filter (5), can-craft (11).
-4. Phase D: deposit matching (3), then protected slots (4).
+4. Phase D: deposit matching (3), then the hotbar and worn-item rule (4). The rule itself is the hotfix in step 0.
 5. Phase E: fill glow (15).
 
 ## 9. Open tuning points
 
-- D1 to D7 in section 1.
+- D1, D4 to D7, and D9 in section 1 (D2, D3, and D8 are decided).
 - Whether the Stored tab's aggregate row count changes with category filters (expected: no; the filter only hides rows).
-- Whether protected slots should also block the player's own single-item deposits (current recommendation: no).

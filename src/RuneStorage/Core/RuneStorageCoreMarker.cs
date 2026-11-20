@@ -13,9 +13,14 @@ namespace RuneStorage
         private const string UpgradeRequestRpc = "RuneStorage_UpgradeRequest";
         private const string UpgradeResultRpc = "RuneStorage_UpgradeResult";
         private static readonly MethodInfo GetPeerMethod = AccessTools.Method(typeof(ZRoutedRpc), "GetPeer", new[] { typeof(long) });
+        internal const string FilledSlotsZdoKey = "RuneStorageFilledSlots";
+        private const float FillPublishInterval = 1f;
         private bool _loadIssueLogged;
         private int _lastLoggedTier;
         private ZNetView _networkView;
+        private Container _fillContainer;
+        private float _nextFillPublishTime;
+        private int _publishedFillCount = -1;
 
         internal bool IsReadOnly { get; private set; }
         internal string StatusMessage { get; private set; }
@@ -41,6 +46,39 @@ namespace RuneStorage
         }
 
         internal ZDO Zdo => _networkView != null ? _networkView.GetZDO() : null;
+
+        // Owner-only. Clients read the saved count from the ZDO and never write it. Each item occupies one
+        // inventory cell (Valheim's SharedData has no footprint size), so the count is the number of stored items.
+        private void Update()
+        {
+            if (Time.time < _nextFillPublishTime) return;
+            _nextFillPublishTime = Time.time + FillPublishInterval;
+            PublishFilledSlots();
+        }
+
+        private void PublishFilledSlots()
+        {
+            if (_networkView == null || !_networkView.IsOwner()) return;
+
+            ZDO zdo = _networkView.GetZDO();
+            if (zdo == null) return;
+
+            if (_fillContainer == null)
+            {
+                Container[] containers = GetComponentsInChildren<Container>(true);
+                if (containers.Length != 1) return;
+                _fillContainer = containers[0];
+            }
+
+            Inventory inventory = _fillContainer.GetInventory();
+            if (inventory == null) return;
+
+            int filled = inventory.GetAllItems().Count;
+            if (filled == _publishedFillCount && zdo.GetInt(FilledSlotsZdoKey, out int stored) && stored == filled) return;
+
+            zdo.Set(FilledSlotsZdoKey, filled);
+            _publishedFillCount = filled;
+        }
 
         private void OnDestroy()
         {
