@@ -32,7 +32,7 @@
 
 ## 2. Phase A - Shared groundwork
 
-- [ ] Verify in `assembly_valheim.dll` the `ItemDrop.ItemData` type fields and `ItemDrop.ItemData.ItemType` enum values needed for category mapping (item 5), and record the exact names here.
+- [x] Verify in `assembly_valheim.dll` the `ItemDrop.ItemData` type fields and `ItemDrop.ItemData.ItemType` enum values needed for category mapping (item 5), and record the exact names here.
 - [x] Verify the input API. `UnityEngine.Input.GetKey`, `GetKeyDown`, and `GetKeyUp` are public static methods in `UnityEngine.InputLegacyModule.dll` (probe, 2026-11-20). Modifier keys use `GetKey` with `KeyCode.LeftShift` and `KeyCode.LeftControl`. Hotkey code is not written yet.
 - [x] Verify item fields and enum (build-time probe of `assembly_valheim.dll`, 2026-11-20). `ItemDrop.ItemData` has `m_stack`, `m_gridPos`, `m_equipped`, `m_shared`, `m_customData`, `m_quality`, `m_variant`, `m_worldLevel`, `m_durability`, `m_crafterID`, `m_crafterName`, `m_dropPrefab`, and `m_cheated`. `ItemType` values: None, Material, Consumable, OneHandedWeapon, Bow, Shield, Helmet, Chest, Ammo, Customization, Legs, Hands, Trophy, TwoHandedWeapon, Torch, Misc, Shoulder, Utility, Tool, Attach_Atgeir, Fish, TwoHandedWeaponLeft, AmmoNonEquipable, Trinket.
 - [x] Confirm `SharedData` has no footprint size (only `m_maxStackSize` and `m_setSize`), so each item occupies one inventory cell and "slots" equals the number of stored items. The terminal's existing "occupied slots" count (`allItems.Count`) is therefore correct.

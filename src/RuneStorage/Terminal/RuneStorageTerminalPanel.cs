@@ -942,8 +942,10 @@ namespace RuneStorage
             icon.enabled = group.Icon != null;
 
             GUIManager gui = GUIManager.Instance;
+            // The pin button takes the top-right corner on Stored tiles, so the name box is narrowed to make room.
+            float nameWidth = _depositTabActive ? 168f : 108f;
             CreateRowText(gui, tile.transform, "ItemName", group.DisplayName,
-                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(58f, -8f), 15, BodyTextColor, 168f, 36f, TextAnchor.UpperLeft);
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(58f, -8f), 15, BodyTextColor, nameWidth, 36f, TextAnchor.UpperLeft);
             string countLabel = $"{group.Count.ToString("N0", CultureInfo.InvariantCulture)} {(_depositTabActive ? "carried" : "stored")}";
             CreateRowText(gui, tile.transform, "ItemCount", countLabel,
                 new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(58f, -44f), 14, AccentColor, 168f, 20f, TextAnchor.UpperLeft);
@@ -954,15 +956,48 @@ namespace RuneStorage
                 CreateTileActionButton(gui, tile.transform, "All", -84f, 50f, () => DepositItem(identity, 0, true));
                 CreateTileActionButton(gui, tile.transform, "X", -28f, 50f, () => DepositCustom(identity));
                 CreateTileActionButton(gui, tile.transform, "5", 28f, 50f, () => DepositItem(identity, 5));
-                CreateTileActionButton(gui, tile.transform, "1", 84f, 50f, () => DepositItem(identity, 1));
+                CreateTileActionButton(gui, tile.transform, "1", 84f, 50f, () => DepositItem(identity, ClickAmount(group, 1, group.Count)));
             }
             else
             {
                 int shownCount = (int)Math.Min(group.Count, int.MaxValue);
-                CreateTileActionButton(gui, tile.transform, "Take 1", -70f, 64f, () => Withdraw(identity, 1, shownCount));
+                CreateTileActionButton(gui, tile.transform, "Take 1", -70f, 64f, () => Withdraw(identity, ClickAmount(group, 1, group.Count), shownCount));
                 CreateTileActionButton(gui, tile.transform, "Take 5", 0f, 64f, () => Withdraw(identity, 5, shownCount));
                 CreateTileActionButton(gui, tile.transform, "Take X", 70f, 64f, () => WithdrawCustom(identity, shownCount));
+                CreatePinButton(gui, tile.transform, group, new Vector2(1f, 1f), new Vector2(-8f, -8f), 56f, 26f);
             }
+        }
+
+        private static void CreatePinButton(GUIManager gui, Transform parent, RuneStorageItemGroup group, Vector2 anchor, Vector2 position, float width, float height)
+        {
+            bool pinned = IsPinnedForPlayer(group);
+            CreateActionButton(gui, parent, pinned ? "Unpin" : "Pin", anchor, position, width, height, 13, () => TogglePin(group));
+        }
+
+        // Pins are per character and keyed by prefab name. They reorder the Stored list only; they never move items.
+        private static bool IsPinnedForPlayer(RuneStorageItemGroup group)
+        {
+            return _player != null && RuneStoragePinStore.IsPinned(_player.GetPlayerID(), group.ItemId);
+        }
+
+        private static void TogglePin(RuneStorageItemGroup group)
+        {
+            if (_player == null) return;
+            bool nowPinned = !IsPinnedForPlayer(group);
+            RuneStoragePinStore.SetPinned(_player.GetPlayerID(), group.ItemId, nowPinned);
+            SetStatus(nowPinned ? $"Pinned {group.DisplayName}." : $"Unpinned {group.DisplayName}.");
+            RefreshRows();
+        }
+
+        // Shift turns a "1" action into one full stack (the item's max stack size), capped by what is available.
+        // Without Shift the fallback amount is used. Ctrl does not change the amount, so Ctrl-click still takes one.
+        private static int ClickAmount(RuneStorageItemGroup group, int fallback, long available)
+        {
+            if (!(Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))) return fallback;
+            if (group.Items.Count == 0 || group.Items[0].m_shared == null) return fallback;
+
+            long stack = Math.Max(1, group.Items[0].m_shared.m_maxStackSize);
+            return (int)Math.Max(1L, Math.Min(stack, available));
         }
 
         private static void CreateTileActionButton(GUIManager gui, Transform parent, string label, float centerX, float width, Action action)
