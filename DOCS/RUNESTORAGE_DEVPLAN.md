@@ -461,15 +461,13 @@ The first configuration file should expose only values that are safe to tune wit
 
 ```ini
 [Storage]
+# Admin-only: Jötunn synchronizes this value from the server to clients.
 CoreRangeMeters = 12
+# Local to each machine; logs refused terminal and Core requests with their reason.
 EnableDebugLogging = false
-
-[Access]
-UseValheimBuildAndWardAccess = true
-
-[UI]
-ItemsPerPage = 40
 ```
+
+Implemented in `Plugin.BindConfig` (build evidence, 2026-11-20). Ward/build access is not configurable: terminal and Core use always follows Valheim's ward and private-area rules. Paging is not used by the current list UI, so no items-per-page setting exists.
 
 Tier slot counts are defined by the tier map, not user configuration. Do not silently lower a Core's tier or hide occupied slots if the supported dimensions change in a later version.
 

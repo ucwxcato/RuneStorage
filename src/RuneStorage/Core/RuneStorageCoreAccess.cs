@@ -10,7 +10,7 @@ namespace RuneStorage
     internal static class RuneStorageCoreAccess
     {
         internal const float TerminalUseDistance = 5f;
-        internal const float CoreRange = 12f;
+        internal static float CoreRange => Plugin.CoreRangeMeters.Value;
         private static readonly MethodInfo CheckAccessMethod = AccessTools.Method(typeof(Container), "CheckAccess");
         private static readonly FieldInfo PrivateAreaList = AccessTools.Field(typeof(PrivateArea), "m_allAreas");
         private static readonly MethodInfo PrivateAreaIsEnabled = AccessTools.Method(typeof(PrivateArea), "IsEnabled");
@@ -53,13 +53,15 @@ namespace RuneStorage
 
             if (nearbyCores.Length == 0)
             {
-                reason = "No RuneStorage Core found within 12 meters of this terminal.";
+                reason = $"No RuneStorage Core found within {CoreRange:0.#} meters of this terminal.";
+                Plugin.DebugLog($"Terminal {terminal.name}: {reason}");
                 return false;
             }
 
             if (nearbyCores.Length > 1)
             {
                 reason = "More than one RuneStorage Core is in range. Keep only one near this terminal.";
+                Plugin.DebugLog($"Terminal {terminal.name}: {nearbyCores.Length} Cores in range; refusing ambiguous access.");
                 return false;
             }
 
