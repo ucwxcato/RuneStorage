@@ -14,6 +14,9 @@ namespace RuneStorage
         private const float CraftStationTop = -244f;
         private const float CraftStationAreaHeight = PanelHeight - 344f;
         private const float CraftListWidth = PanelWidth - 68f - CraftStationWidth - 24f;
+        private const int CraftGridColumns = 3;
+        private const float CraftTileWidth = 224f;
+        private const float CraftTileHeight = 164f;
         private static GameObject _craftStationTabs;
         private static RectTransform _craftStationContent;
         private static Text _craftStationHeader;
@@ -283,9 +286,11 @@ namespace RuneStorage
             }
 
             _emptyText.gameObject.SetActive(false);
+            bool grid = IsItemGridActive();
             for (int index = 0; index < visible.Count; index++)
             {
-                CreateCraftRecipeRow(visible[index], index);
+                if (grid) CreateCraftRecipeTile(visible[index]);
+                else CreateCraftRecipeRow(visible[index], index);
             }
         }
 
@@ -392,13 +397,20 @@ namespace RuneStorage
             }
         }
 
-        private static void CreateCraftRecipeRow(RuneStorageCraftingRecipe recipe, int index)
+        private static string GetRecipeDetails(RuneStorageCraftingRecipe recipe)
         {
             string details = recipe.IngredientSummary;
             if (!recipe.IsSupported || !recipe.OutputAvailable)
             {
                 details += "   |   " + recipe.DisabledReason;
             }
+
+            return details;
+        }
+
+        private static void CreateCraftRecipeRow(RuneStorageCraftingRecipe recipe, int index)
+        {
+            string details = GetRecipeDetails(recipe);
 
             int lines = Mathf.Clamp((details.Length + 69) / 70, 1, 4);
             float height = 51f + lines * 18f;
@@ -453,6 +465,39 @@ namespace RuneStorage
                 string recipeIdentity = recipe.Identity;
                 craftButton.onClick.AddListener(() => RequestCraft(recipeIdentity));
             }
+        }
+
+        // Same Craft action and availability as the list row. Ingredient text is clipped at the tile edge, so the
+        // full requirement list is readable in list view.
+        private static void CreateCraftRecipeTile(RuneStorageCraftingRecipe recipe)
+        {
+            GameObject tile = new GameObject("RuneStorageCraftRecipeTile", typeof(RectTransform), typeof(Image));
+            tile.transform.SetParent(_content, false);
+            tile.GetComponent<Image>().color = RowColor;
+
+            GameObject iconObject = new GameObject("RecipeIcon", typeof(RectTransform), typeof(Image));
+            iconObject.transform.SetParent(tile.transform, false);
+            SetRect(iconObject.GetComponent<RectTransform>(), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(10f, -10f), new Vector2(40f, 40f));
+            Image icon = iconObject.GetComponent<Image>();
+            icon.sprite = recipe.Icon;
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            icon.enabled = recipe.Icon != null;
+
+            GUIManager gui = GUIManager.Instance;
+            CreateRowText(gui, tile.transform, "RecipeName", $"{recipe.DisplayName} x{recipe.OutputAmount}",
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(58f, -8f), 15, BodyTextColor, CraftTileWidth - 68f, 36f, TextAnchor.UpperLeft);
+            CreateRowText(gui, tile.transform, "RecipeRequirements", GetRecipeDetails(recipe),
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(10f, -58f), 13, BodyTextColor, CraftTileWidth - 20f, 56f, TextAnchor.UpperLeft);
+
+            string recipeIdentity = recipe.Identity;
+            Button craftButton = CreateActionButton(gui, tile.transform, "Craft", new Vector2(0.5f, 0f), new Vector2(0f, 10f), 120f, 34f, 15,
+                () => RequestCraft(recipeIdentity));
+            if (craftButton == null) return;
+
+            craftButton.gameObject.name = "RuneStorageCraftOne";
+            SetAutomaticNavigation(craftButton);
+            craftButton.interactable = recipe.CanCraft && string.IsNullOrEmpty(_pendingCraftRequestId);
         }
 
         private static void SetAutomaticNavigation(Selectable selectable)

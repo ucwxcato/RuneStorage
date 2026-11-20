@@ -4,6 +4,8 @@ Place a terminal and a Core, and your storage becomes one searchable list. The C
 
 ![RuneStorage Terminal in game](https://raw.githubusercontent.com/ucwxcato/RuneStorage/main/DOCS/images/runestorage-terminal.png)
 
+![RuneStorage Terminal grid view of stored items](https://raw.githubusercontent.com/ucwxcato/RuneStorage/main/DOCS/images/runestorage-terminal-grid-view.png)
+
 ## Costs
 
 **RuneStorage Terminal** (Hammer): 10 Fine Wood, 10 Stone, 2 Surtling Cores.

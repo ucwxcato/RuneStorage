@@ -18,6 +18,10 @@ namespace RuneStorage
 
         private const float PanelWidth = 1100f;
         private const float PanelHeight = 780f;
+        private const int GridColumns = 4;
+        private const float TileWidth = 236f;
+        private const float TileHeight = 116f;
+        private const float TileSpacing = 8f;
         private static readonly Color SurfaceColor = new Color(0.13f, 0.09f, 0.05f, 1f);
         private static readonly Color RowColor = new Color(0.19f, 0.13f, 0.07f, 1f);
         private static readonly Color AlternateRowColor = new Color(0.16f, 0.11f, 0.06f, 1f);
@@ -38,6 +42,7 @@ namespace RuneStorage
         private static Button _depositTabButton;
         private static Button _craftTabButton;
         private static Button _depositEverythingButton;
+        private static Button _viewToggleButton;
         private static Text _sortLabel;
         private static Button _sortByNameButton;
         private static Button _sortByAmountButton;
@@ -49,6 +54,7 @@ namespace RuneStorage
         private static bool _isOpen;
         private static bool _depositTabActive;
         private static bool _craftTabActive;
+        private static bool _gridView;
         private static bool _restoreCursor;
         private static CursorLockMode _previousCursorLock;
         private static bool _previousCursorVisible;
@@ -73,6 +79,7 @@ namespace RuneStorage
             _depositTabButton = null;
             _craftTabButton = null;
             _depositEverythingButton = null;
+            _viewToggleButton = null;
             _sortLabel = null;
             _sortByNameButton = null;
             _sortByAmountButton = null;
@@ -189,6 +196,8 @@ namespace RuneStorage
             _storedTabButton = CreateTabButton(gui, "Stored", new Vector2(34f, -159f), () => SelectTab(false));
             _depositTabButton = CreateTabButton(gui, "Deposit", new Vector2(150f, -159f), () => SelectTab(true));
             _craftTabButton = CreateTabButton(gui, "Craft", new Vector2(266f, -159f), SelectCraftTab);
+            _viewToggleButton = CreateToolbarButton(gui, "RuneStorageViewToggle", "Grid view", new Vector2(PanelWidth - 34f - 150f, -159f), 150f, 38f, 16,
+                ToggleItemView);
 
             GameObject searchObject = gui.CreateInputField(
                 _panel.transform,
@@ -439,8 +448,49 @@ namespace RuneStorage
             content.anchoredPosition = Vector2.zero;
             content.sizeDelta = new Vector2(0f, 0f);
 
-            VerticalLayoutGroup layout = content.GetComponent<VerticalLayoutGroup>();
-            if (layout == null) layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
+            ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>();
+            if (fitter == null) fitter = content.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            ApplyContentLayoutMode(content);
+        }
+
+        // Grid view applies to the Stored, Deposit, and Craft lists. The Upgrade list keeps its list layout.
+        private static bool IsItemGridActive()
+        {
+            return _gridView && !_upgradeTabActive;
+        }
+
+        // Unity allows one LayoutGroup per GameObject, so the content swaps its group rather than holding both.
+        private static void ApplyContentLayoutMode(RectTransform content)
+        {
+            if (content == null) return;
+
+            if (IsItemGridActive())
+            {
+                RemoveLayoutGroup<VerticalLayoutGroup>(content);
+                GridLayoutGroup grid = content.GetComponent<GridLayoutGroup>();
+                if (grid == null) grid = content.gameObject.AddComponent<GridLayoutGroup>();
+                ConfigureGridLayout(grid);
+            }
+            else
+            {
+                RemoveLayoutGroup<GridLayoutGroup>(content);
+                VerticalLayoutGroup layout = content.GetComponent<VerticalLayoutGroup>();
+                if (layout == null) layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
+                ConfigureVerticalLayout(layout);
+            }
+        }
+
+        private static void RemoveLayoutGroup<T>(RectTransform content) where T : LayoutGroup
+        {
+            T existing = content.GetComponent<T>();
+            if (existing != null) UnityEngine.Object.DestroyImmediate(existing);
+        }
+
+        private static void ConfigureVerticalLayout(VerticalLayoutGroup layout)
+        {
             layout.spacing = 5f;
             layout.padding = new RectOffset(5, 5, 5, 5);
             layout.childAlignment = TextAnchor.UpperCenter;
@@ -448,11 +498,19 @@ namespace RuneStorage
             layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
+        }
 
-            ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>();
-            if (fitter == null) fitter = content.gameObject.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        private static void ConfigureGridLayout(GridLayoutGroup grid)
+        {
+            // Craft tiles are taller for ingredient text and narrower because the station rail takes the right side.
+            grid.cellSize = _craftTabActive ? new Vector2(CraftTileWidth, CraftTileHeight) : new Vector2(TileWidth, TileHeight);
+            grid.spacing = new Vector2(TileSpacing, TileSpacing);
+            grid.padding = new RectOffset(5, 5, 5, 5);
+            grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+            grid.childAlignment = TextAnchor.UpperLeft;
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = _craftTabActive ? CraftGridColumns : GridColumns;
         }
 
         private static void Show()
@@ -585,6 +643,7 @@ namespace RuneStorage
             }
             SetSortControlsVisible(!deposit && !_craftTabActive);
             SetCraftControlsVisible(false);
+            SetViewToggleVisible(true);
             UpdateSortControls();
 
             if (_amountInput != null) _amountInput.gameObject.SetActive(true);
@@ -621,6 +680,7 @@ namespace RuneStorage
 
             if (_depositEverythingButton != null) _depositEverythingButton.gameObject.SetActive(false);
             SetSortControlsVisible(false);
+            SetViewToggleVisible(true);
             SetCraftControlsVisible(true);
             if (_amountInput != null) _amountInput.gameObject.SetActive(false);
             if (_amountLabel != null) _amountLabel.gameObject.SetActive(false);
@@ -706,6 +766,30 @@ namespace RuneStorage
             UpdateSortControls();
             SetStatus($"Stored items sorted by {GetSortFieldLabel()}, {(_sortAscending ? "ascending" : "descending")}.");
             RefreshRows();
+        }
+
+        private static void ToggleItemView()
+        {
+            _gridView = !_gridView;
+            ApplyContentLayoutMode(_content);
+            UpdateViewToggle();
+            SetStatus(_gridView ? "Showing as a grid." : "Showing as a list.");
+            RefreshRows();
+        }
+
+        private static void SetViewToggleVisible(bool visible)
+        {
+            if (_viewToggleButton == null) return;
+            _viewToggleButton.gameObject.SetActive(visible);
+            if (visible) UpdateViewToggle();
+        }
+
+        // The label names the view the button switches to, so the action is clear before it is taken.
+        private static void UpdateViewToggle()
+        {
+            if (_viewToggleButton == null) return;
+            SetButtonText(_viewToggleButton.gameObject, _gridView ? "List view" : "Grid view");
+            _viewToggleButton.gameObject.name = _gridView ? "RuneStorageListViewToggle" : "RuneStorageGridViewToggle";
         }
 
         private static void UpdateSortControls()
@@ -832,10 +916,58 @@ namespace RuneStorage
             }
 
             _emptyText.gameObject.SetActive(false);
+            bool grid = IsItemGridActive();
             for (int index = 0; index < visibleGroups.Count; index++)
             {
-                CreateItemRow(visibleGroups[index], index);
+                if (grid) CreateItemTile(visibleGroups[index]);
+                else CreateItemRow(visibleGroups[index], index);
             }
+        }
+
+        // Tiles share one fill colour. A grid has no reading order to stripe, so alternating rows would only add noise.
+        private static void CreateItemTile(RuneStorageItemGroup group)
+        {
+            GameObject tile = new GameObject("RuneStorageItemTile", typeof(RectTransform), typeof(Image));
+            tile.transform.SetParent(_content, false);
+            tile.GetComponent<Image>().color = RowColor;
+
+            GameObject iconObject = new GameObject("ItemIcon", typeof(RectTransform), typeof(Image));
+            iconObject.transform.SetParent(tile.transform, false);
+            RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+            SetRect(iconRect, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(10f, -10f), new Vector2(40f, 40f));
+            Image icon = iconObject.GetComponent<Image>();
+            icon.sprite = group.Icon;
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            icon.enabled = group.Icon != null;
+
+            GUIManager gui = GUIManager.Instance;
+            CreateRowText(gui, tile.transform, "ItemName", group.DisplayName,
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(58f, -8f), 15, BodyTextColor, 168f, 36f, TextAnchor.UpperLeft);
+            string countLabel = $"{group.Count.ToString("N0", CultureInfo.InvariantCulture)} {(_depositTabActive ? "carried" : "stored")}";
+            CreateRowText(gui, tile.transform, "ItemCount", countLabel,
+                new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(58f, -44f), 14, AccentColor, 168f, 20f, TextAnchor.UpperLeft);
+
+            string identity = group.Identity;
+            if (_depositTabActive)
+            {
+                CreateTileActionButton(gui, tile.transform, "All", -84f, 50f, () => DepositItem(identity, 0, true));
+                CreateTileActionButton(gui, tile.transform, "X", -28f, 50f, () => DepositCustom(identity));
+                CreateTileActionButton(gui, tile.transform, "5", 28f, 50f, () => DepositItem(identity, 5));
+                CreateTileActionButton(gui, tile.transform, "1", 84f, 50f, () => DepositItem(identity, 1));
+            }
+            else
+            {
+                int shownCount = (int)Math.Min(group.Count, int.MaxValue);
+                CreateTileActionButton(gui, tile.transform, "Take 1", -70f, 64f, () => Withdraw(identity, 1, shownCount));
+                CreateTileActionButton(gui, tile.transform, "Take 5", 0f, 64f, () => Withdraw(identity, 5, shownCount));
+                CreateTileActionButton(gui, tile.transform, "Take X", 70f, 64f, () => WithdrawCustom(identity, shownCount));
+            }
+        }
+
+        private static void CreateTileActionButton(GUIManager gui, Transform parent, string label, float centerX, float width, Action action)
+        {
+            CreateActionButton(gui, parent, label, new Vector2(0.5f, 0f), new Vector2(centerX, 12f), width, 34f, 14, action);
         }
 
         private static void CreateItemRow(RuneStorageItemGroup group, int index)
@@ -901,29 +1033,32 @@ namespace RuneStorage
 
         private static void CreateRowActionButton(GUIManager gui, Transform parent, string label, float rightOffset, float width, Action action)
         {
-            GameObject buttonObject = gui.CreateButton(
-                label,
-                parent,
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(-rightOffset, 0f),
-                width,
-                42f);
+            CreateActionButton(gui, parent, label, new Vector2(1f, 0.5f), new Vector2(-rightOffset, 0f), width, 42f, 15, action);
+        }
+
+        // Anchor and pivot share one point, so position is measured from that anchor.
+        private static Button CreateActionButton(
+            GUIManager gui,
+            Transform parent,
+            string label,
+            Vector2 anchor,
+            Vector2 position,
+            float width,
+            float height,
+            int fontSize,
+            Action action)
+        {
+            GameObject buttonObject = gui.CreateButton(label, parent, anchor, anchor, position, width, height);
             buttonObject.transform.SetParent(parent, false);
-            SetRect(
-                buttonObject.GetComponent<RectTransform>(),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(-rightOffset, 0f),
-                new Vector2(width, 42f));
+            SetRect(buttonObject.GetComponent<RectTransform>(), anchor, anchor, anchor, position, new Vector2(width, height));
             SetButtonText(buttonObject, label);
 
             Button button = buttonObject.GetComponent<Button>();
-            if (button == null) return;
+            if (button == null) return null;
 
-            gui.ApplyButtonStyle(button, 15);
+            gui.ApplyButtonStyle(button, fontSize);
             button.onClick.AddListener(() => action());
+            return button;
         }
 
         private static Text CreateRowText(

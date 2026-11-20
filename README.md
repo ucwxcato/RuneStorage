@@ -4,6 +4,8 @@ Place a terminal and a Core, and your storage becomes one searchable list. The C
 
 ![RuneStorage Terminal in game](DOCS/images/runestorage-terminal.png)
 
+![RuneStorage Terminal grid view of stored items](DOCS/images/runestorage-terminal-grid-view.png)
+
 Version 0.1.0 is the first public release.
 
 ## What it does

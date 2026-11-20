@@ -40,6 +40,7 @@ namespace RuneStorage
             if (_depositEverythingButton != null) _depositEverythingButton.gameObject.SetActive(false);
             SetSortControlsVisible(false);
             SetCraftControlsVisible(false);
+            SetViewToggleVisible(false);
             if (_amountInput != null) _amountInput.gameObject.SetActive(false);
             if (_amountLabel != null) _amountLabel.gameObject.SetActive(false);
             if (_searchInput != null)

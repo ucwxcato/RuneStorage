@@ -643,6 +643,7 @@ Source (version 0.1.12) implements the Core-owner transfer path. The Core owner 
 - [x] Use Jotunn's wood panel, scroll view, buttons, inputs, and Valheim fonts; keep the UI under Jotunn's scene-managed anchor.
 - [x] Implement Stored and Deposit tabs with occupied slots, active tier capacity, total item quantity, search, deterministic sorting, aggregate rows/icons, per-item Take/Deposit 1/5/X/All, and deposit-everything controls.
 - [x] Add Stored-tab Name/Amount sort controls with an ascending/descending arrow toggle.
+- [x] Add a Grid/List view toggle on the Stored, Deposit, and Craft tabs. Grid tiles show the icon, name, and count (or recipe output, ingredients, and Craft button on the Craft tab) with the same actions as list rows; the view preference is shared across those tabs and the Upgrade tab keeps its list layout. Craft tiles clip long ingredient text, so the full list is readable in list view. Build evidence only (Release build succeeded and the DLL is deployed to the RuneStorage Test profile); in-game layout, scrolling, and action checks are pending.
 - [x] Set terminal list scroll sensitivity to 300 after follow-up feedback that the previous setting was still too slow; verify the new rate in-game.
 - [ ] Increase stored-item list scroll sensitivity from 300 to 600 and verify the faster rate in-game.
 - [ ] Runtime-check the expanded 1100x780 panel and fixed right-side crafting-station rail: all detected station tabs, recipe list, search, output toggle, status, and help text must fit without clipping at common resolutions.
